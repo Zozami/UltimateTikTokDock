@@ -1,0 +1,20 @@
+# --- secrets & machine state (never commit) ---
+slobs-token.txt
+like-streamer.txt
+like-engine-profile/
+*.log
+
+# --- node ---
+node_modules/
+
+# --- runtime misc ---
+config.json
+*.pid
+*.tmp
+
+# --- editor / OS / tooling ---
+.freebuff/
+.cbt-test/
+Thumbs.db
+desktop.ini
+.DS_Store

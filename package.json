@@ -1,0 +1,10 @@
+{
+  "name": "tikfinity-dock-like-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PC auto-liker for TikFinity Dock (second account). Local only.",
+  "dependencies": {
+    "playwright-core": "^1.47.0",
+    "ws": "^8.17.0"
+  }
+}

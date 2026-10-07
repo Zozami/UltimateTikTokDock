@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TikFinity</title>
+  <!-- v= bumps on every release: OBS's browser source caches sub-resources
+       hard, so changing only app.js/style.css would otherwise keep serving
+       the OLD file. Bump this number whenever you ship a change. -->
+  <link rel="stylesheet" href="style.css?v=44">
+</head>
+<body>
+  <main class="app">
+
+    <header class="header">
+      <div class="title">TikFinity</div>
+      <div class="headerRight">
+        <button id="retryBtn" class="retryBtn" type="button" hidden>Reconnect</button>
+        <span id="statusText" class="statusText"></span>
+        <span id="statusDot" class="dot" title="Disconnected"></span>
+        <button id="menuBtn" class="menuBtn" type="button" title="Settings" aria-haspopup="true">⋮</button>
+      </div>
+    </header>
+
+    <section class="topPanel">
+      <section id="statLine" class="statLine">
+        <span class="stat" title="Viewers"><i class="i views"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg></i><span id="statViewers">–</span></span>
+        <span class="stat" title="Total likes"><i class="i likes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></i><span id="statLikes">–</span></span>
+        <span class="stat" title="Diamonds earned"><i class="i diamond"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M6 3l6 6 6-6M2 9h20M12 9v12"/></svg></i><span id="statDiamonds">0</span></span>
+      </section>
+
+      <section id="topGifters" class="board"></section>
+      <section id="topLikers" class="board"></section>
+
+      <div id="goalBar" class="goalBar" hidden>
+        <span id="goalLabel" class="goalLabel"></span>
+        <div class="goalTrack"><i id="goalFill"></i></div>
+        <span id="goalNums" class="goalNums"></span>
+      </div>
+    </section>
+
+    <section id="userFilterBar" class="userFilterBar" hidden>
+      <span id="userFilterName"></span>
+      <button id="userFilterClear" class="ufClear" type="button" title="Show all events again">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </section>
+
+    <section id="pollBox" class="pollBox" hidden></section>
+
+    <section id="feed" class="feed">
+      <div id="empty" class="empty">
+        <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/></svg></div>
+        <div class="emptyTitle">Waiting for TikFinity</div>
+        <div class="emptyText">
+          Start TikFinity Desktop and go live on TikTok.
+          Chat, gifts, likes and follows will appear here.
+        </div>
+      </div>
+    </section>
+
+    <form id="chatBar" class="chatBar" autocomplete="off">
+      <input id="chatInput" class="chatInput" type="text" maxlength="150" placeholder="Send to chat…" autocomplete="off">
+      <button id="chatSend" class="chatSend" type="submit" title="Send to TikTok chat (Enter)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>
+      </button>
+    </form>
+    <div class="hintLine chatProblem" id="chatHint" hidden></div>
+
+    <footer class="footer">
+      <span id="count">0 events</span>
+      <span class="sep">·</span>
+      <span id="demoInfo">live</span>
+      <span id="obsStats" class="obsStats" title="OBS output: fps, bitrate, dropped frames" hidden></span>
+    </footer>
+
+  </main>
+
+  <!-- Settings sheet: dropdown replacement on the feed dock, the whole app on the controls dock -->
+  <section id="sheet" class="sheet" hidden>
+    <header class="sheetHead">
+      <span class="sheetTitle" id="sheetTitle">Settings</span>
+      <span class="headRight">
+        <span id="cDot" class="dot" title=""></span>
+        <button id="sheetClose" class="xBtn" type="button" title="Close settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </span>
+    </header>
+
+    <div class="sheetBody">
+
+      <div class="bandLabel">Go live</div>
+
+      <section class="sGroup closed" id="gKey">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5v17l14-8.5z"/></svg>
+          <span>Stream key</span>
+          <span id="keyStatus" class="sStatus"></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <div class="menuRow">Title <input id="keyTitle" class="menuInput" maxlength="80" placeholder="Stream title"></div>
+          <div class="catWrap">
+            <div class="menuRow">Category <input id="keyCategory" class="menuInput" maxlength="60" placeholder="Type to search…" autocomplete="off"></div>
+            <div class="catSuggest" id="catSuggest" hidden></div>
+          </div>
+          <div class="checkRow">
+            <label class="menuCheck"><input type="checkbox" id="obsStartToo">Start Aitum stream</label>
+            <label class="menuCheck"><input type="checkbox" id="openTikfinity">Open TikFinity</label>
+          </div>
+          <div class="menuRowBtns">
+            <button id="keyGet" class="sheetBtn sheetBtnGo" type="button">Start stream</button>
+            <button id="keyEnd" class="sheetBtn keyDanger" type="button" disabled>End stream</button>
+          </div>
+          <div class="acctLine">
+            <span class="acctDot" id="acctDot"></span>
+            <span id="acctName">checking account…</span>
+          </div>
+          <div class="menuRowBtns">
+            <button id="keyInfo" class="sheetBtn" type="button">Check account</button>
+            <button id="acctBtn" class="sheetBtn keyDanger" type="button">Connect…</button>
+          </div>
+          <div id="acctForm" hidden>
+            <div class="hintLine" id="acctHint">Only shown when the sign-in could not open a browser. Paste a Streamlabs token you already have, or open the address from the message above yourself.</div>
+            <div class="menuRow">Token <input id="acctToken" class="menuInput" type="password" autocomplete="off" placeholder="Streamlabs token"></div>
+            <div class="menuRowBtns">
+              <button id="acctSave" class="sheetBtn sheetBtnGo" type="button">Save &amp; connect</button>
+            </div>
+          </div>
+          <div class="hintLine" id="keyHint" hidden></div>
+          <div class="keyOut" id="keyOut">
+            <div class="keyLine"><span>Server</span><b id="keyUrl" class="keyVal keyBlank">—</b></div>
+            <div class="keyLine"><span>Key</span><b id="keyVal" class="keyVal keyBlank">—</b></div>
+            <div class="menuRow">OBS ws port <input id="obsPort" class="menuNum" type="number" min="1" max="65535" value="4455"></div>
+            <div class="menuRow">OBS password <input id="obsPass" class="menuInput" type="password" autocomplete="off" placeholder="obs-websocket password"></div>
+            <div class="hintLine" id="obsConn" hidden></div>
+            <div class="hintLine" id="obsHint" hidden></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="bandLabel">While live</div>
+
+      <section class="sGroup closed" id="gChat">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.7-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/></svg>
+          <span>Chat sending</span>
+          <span id="chatStatus" class="sStatus"></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <div class="menuRow">Bridge port <input id="bridgePort" class="menuNum" type="number" min="1" max="65535" value="8080"></div>
+          <ol class="hintLine hintSteps" id="bridgeHint" hidden>
+            <li>Run SETUP.bat once (in this folder)</li>
+            <li>TikFinity → Setup → Streamer.bot Connection: 127.0.0.1 + this port</li>
+            <li>TikFinity → Chatbot → tick "Allow Streamer.bot to push messages to TikFinity"</li>
+          </ol>
+          <div class="menuRowBtns"><button id="bridgeRetry" class="sheetBtn" type="button">Reconnect bridge</button></div>
+        </div>
+      </section>
+
+      <section class="sGroup closed" id="gPoll">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20v-7M12 20V4M19 20v-10"/></svg>
+          <span>Chat poll</span>
+          <span id="pollStatus" class="sStatus"></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <input id="pollQ" class="menuInput" placeholder="Question" maxlength="80">
+          <input id="pollOpts" class="menuInput" placeholder="Options, comma separated" maxlength="160">
+          <div class="menuRowBtns">
+            <button id="pollStart" class="sheetBtn" type="button">Start</button>
+            <button id="pollEnd" class="sheetBtn" type="button">End &amp; announce</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="sGroup closed" id="gSnd">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          <span>Gift alert</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <label class="menuCheck"><input type="checkbox" id="fSound" checked> <span class="sw"></span>On</label>
+          <div class="menuRow">Big gift ≥ <input id="soundBig" class="menuNum" type="number" min="1" value="99"></div>
+        </div>
+      </section>
+
+      <section class="sGroup closed" id="gLike">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+          <span>Like engine</span>
+          <span id="likeStatus" class="sStatus"></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <label class="menuCheck"><input type="checkbox" id="likeOn"> <span class="sw red"></span>Auto-like via second account</label>
+          <div class="menuRow">Speed
+            <select id="likeSpeed" class="menuSel">
+              <option value="calm">Calm · ~5/min</option>
+              <option value="normal" selected>Normal · ~11/min</option>
+            <option value="fast">Fast · ~29/min</option>
+            <option value="turbo">Turbo · ~75/min</option>
+            </select>
+          </div>
+          <div class="hintLine" id="likeRate" hidden></div>
+          <div class="hintLine hintBad" id="likeErr" hidden></div>
+          <div class="hintLine" id="likeHint" hidden>
+            Engine not reachable. Run <b>SETUP.bat</b> once, then<br>
+            <b>node auto-liker.js --login</b> (log in as account 2), then<br>
+            <b>node auto-liker.js</b> — or SETUP.bat for autostart.
+          </div>
+        </div>
+      </section>
+
+      <div class="bandLabel">What you see</div>
+
+      <section class="sGroup closed" id="gGoal">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+          <span>Goal bar</span>
+          <span id="goalStatus" class="sStatus"></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <label class="menuCheck"><input type="checkbox" id="goalOn" checked> <span class="sw green"></span>Show goal bar</label>
+          <div class="menuRow">Type
+            <select id="goalType" class="menuSel">
+              <option value="followers">Followers gained</option>
+              <option value="likes">Total likes</option>
+              <option value="diamonds">Diamonds</option>
+            </select>
+          </div>
+          <div class="menuRow">Target <input id="goalTarget" class="menuNum" type="number" min="1" value="500"></div>
+        </div>
+      </section>
+
+      <section class="sGroup closed" id="gFeed">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Feed visibility</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody checkGrid">
+          <label class="menuCheck"><input type="checkbox" id="fGift" checked> <span class="sw"></span>Gifts</label>
+          <label class="menuCheck"><input type="checkbox" id="fChat" checked> <span class="sw"></span>Chat</label>
+          <label class="menuCheck"><input type="checkbox" id="fLike" checked> <span class="sw"></span>Likes</label>
+          <label class="menuCheck"><input type="checkbox" id="fFollow" checked> <span class="sw"></span>Follows</label>
+          <label class="menuCheck"><input type="checkbox" id="fSocial" checked> <span class="sw"></span>Social</label>
+          <label class="menuCheck"><input type="checkbox" id="fMember" checked> <span class="sw"></span>Joins</label>
+          <label class="menuCheck"><input type="checkbox" id="fOther" checked> <span class="sw"></span>Other</label>
+        </div>
+      </section>
+
+      <section class="sGroup closed" id="gLb">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 17l-1-9 5.5 4L12 5l4.5 7L22 8l-1 9z"/><path d="M4 21h16"/></svg>
+          <span>Leaderboards</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <label class="menuCheck"><input type="checkbox" id="fBoardGifters" checked> <span class="sw gold"></span>Top gifters</label>
+          <label class="menuCheck"><input type="checkbox" id="fBoardLikers" checked> <span class="sw pink"></span>Top likers</label>
+        </div>
+      </section>
+
+      <div class="bandLabel">This session</div>
+
+      <section class="sGroup closed" id="gSess">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <span>Session</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <div class="sessRow"><span>Live for</span><b id="sessUp">–</b></div>
+          <div class="sessRow"><span>Peak viewers</span><b id="sessPeak">–</b></div>
+          <div class="sessRow"><span>Likes</span><b id="sessLikes">–</b></div>
+          <div class="sessRow"><span>Diamonds</span><b id="sessDia">–</b></div>
+          <div class="sessRow"><span>Followers gained</span><b id="sessFollow">–</b></div>
+          <div class="sessRow"><span>Top gifter</span><b id="sessTop">–</b></div>
+          <div class="menuRowBtns"><button id="summaryBtn" class="sheetBtn" type="button">Copy summary</button></div>
+        </div>
+      </section>
+
+<div class="menuFoot" id="endpoint">ws://localhost:21213/</div>
+    </div>
+
+    <footer class="sheetFoot">
+      <button id="demoBtn" class="sheetBtn" type="button">Demo</button>
+      <button id="clearBtn" class="sheetBtn" type="button">Clear feed</button>
+    </footer>
+  </section>
+
+  <button id="pausePill" class="pausePill" type="button">Resume live</button>
+
+  <!-- First-run overlay: shows once, only until the user closes it -->
+  <div id="welcome" class="welcome" hidden>
+    <div class="welcomeCard">
+      <div class="wTitle">Welcome to the TikFinity dock</div>
+      <ol class="hintSteps wSteps">
+        <li>Open <b>TikFinity Desktop</b> and go live on TikTok — the dot in the corner turns <span class="okT">green</span> and events stream in.</li>
+        <li>To <b>send chat</b> from this dock, run <b>SETUP.bat</b> once, then point TikFinity at it: Setup → Streamer.bot Connection → <b>127.0.0.1</b> port <b>8080</b>, and tick “Allow Streamer.bot to push messages to TikFinity” under Chatbot.</li>
+        <li>Everything else is automatic. Settings (⋮) has polls, leaderboards, goals, sounds and session stats.</li>
+      </ol>
+      <button id="welcomeClose" class="sheetBtn wBtn" type="button">Got it</button>
+    </div>
+  </div>
+
+  <script src="obs-ws.js?v=12"></script>
+  <script src="app.js?v=67"></script>
+</body>
+</html>
