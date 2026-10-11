@@ -92,8 +92,21 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 //   - the events themselves, as a fallback for a dock that is not running
 const HANDLE_FILE = path.join(__dirname, "like-streamer.txt");
 
+// The dock's sample replay posts as demo.host / demo.viewer1. Sample data must
+// never decide whose stream we tap: an older build pushed it, the handle was
+// saved next to the login profile, and the engine then spent a session
+// clicking a room that does not exist while still reporting success. Kept as
+// a shape test rather than one literal, so a future sample host is covered.
+function isSampleHandle(handle) {
+  return /^demo\.(host|viewer\d*|sub[_-]?user)$/i.test(String(handle || "").replace(/^@/, "").trim());
+}
+
 function setStreamer(handle, source) {
   const h = String(handle || "").replace(/^@/, "").trim();
+  if (isSampleHandle(h)) {
+    log("ignoring a sample handle from " + source + " (" + h + ") - that is demo data, not a real stream");
+    return false;
+  }
   if (!h || h === STREAMER) return false;
   STREAMER = h;
   log("streaming handle: " + h + " (from " + source + ")");
@@ -109,7 +122,16 @@ function setStreamer(handle, source) {
 // like the rest of this creator's own data.
 try {
   if (!STREAMER && fs.existsSync(HANDLE_FILE)) {
-    STREAMER = fs.readFileSync(HANDLE_FILE, "utf8").trim().replace(/^@/, "");
+    const saved = fs.readFileSync(HANDLE_FILE, "utf8").trim().replace(/^@/, "");
+    if (isSampleHandle(saved)) {
+      // Heals any machine that already ran an old build's demo: without this
+      // the sample host outranked the real anchor, because the event learner
+      // below only ever fills an empty handle.
+      log("dropping a saved sample handle (" + saved + ") - it came from a demo replay");
+      try { fs.unlinkSync(HANDLE_FILE); } catch { }
+    } else {
+      STREAMER = saved;
+    }
   }
 } catch { }
 
