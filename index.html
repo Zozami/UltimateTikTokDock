@@ -8,7 +8,7 @@
        gets re-read when its number changes. You do not have to touch this -
        UPDATE.bat, or the Updates panel in Settings, rewrites all three in lockstep
        on every install (see Update-CacheBust in update.ps1). -->
-  <link rel="stylesheet" href="style.css?v=79">
+  <link rel="stylesheet" href="style.css?v=80">
 </head>
 <body>
   <main class="app">
@@ -184,16 +184,15 @@
                live, because a like control only exists on a live room. -->
           <div class="menuRowBtns"><button id="likeToggle" class="sheetBtn sheetBtnGo" type="button" disabled>Start auto-like</button></div>
           <!-- One speed, and it is not a setting: the engine taps about twice a
-               second (its own file is the single source of truth for that). The
-               line below states the pace and the cost of it instead of offering
-               a menu of speeds nobody could predict. -->
-          <div class="hintLine">About 2 likes a second while you are live — one fixed speed, nothing to tune.
-            At that pace account 2 is the one TikTok would limit, and automated liking breaks their rules.</div>
+               second (its own file is the single source of truth for that). One
+               short line states the pace and whose account carries the risk,
+               instead of a menu of speeds nobody could predict. -->
+          <div class="hintLine">One fixed speed: about 2 likes a second, from account 2. Automated
+            liking breaks TikTok's rules - account 2 carries that risk.</div>
           <div class="hintLine hintBad" id="likeErr" hidden></div>
           <div class="hintLine" id="likeHint" hidden>
-            Engine not reachable. Run <b>SETUP.bat</b> once, then<br>
-            <b>node auto-liker.js --login</b> (log in as account 2), then<br>
-            <b>node auto-liker.js</b> — or SETUP.bat for autostart.
+            Engine not reachable. Run <b>SETUP.bat</b>, or by hand: <b>node auto-liker.js --login</b>
+            once (as account 2), then <b>node auto-liker.js</b>.
           </div>
         </div>
       </section>
@@ -336,7 +335,10 @@
         </div>
       </section>
 
-<div class="menuFoot" id="endpoint">ws://localhost:21213/</div>
+<!-- Filled by setFootStatus(): the dock's own connection line while the
+     sheet is open. It starts empty rather than showing a raw websocket URL -
+     the URL is what the dock dials, not something a streamer needs to read. -->
+<div class="menuFoot" id="endpoint"></div>
     </div>
 
     <footer class="sheetFoot">
@@ -360,7 +362,7 @@
     </div>
   </div>
 
-  <script src="obs-ws.js?v=79"></script>
-  <script src="app.js?v=79"></script>
+  <script src="obs-ws.js?v=80"></script>
+  <script src="app.js?v=80"></script>
 </body>
 </html>
