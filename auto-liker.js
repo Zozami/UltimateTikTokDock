@@ -69,6 +69,10 @@ let state = {
   tapsFail: 0,        // click attempts that did not land
   tapTarget: "",      // which selector/page we were actually on
   lastError: "",
+  // A failure to even start (no Chrome, no profile) is never stale, unlike a
+  // tap-loop complaint — those describe what was happening while tapping, so
+  // they are only reported while the engine is meant to be running.
+  bootError: "",
   loggedIn: false,
   // Delay between taps. ONE fixed speed, deliberately not tunable: the dock
   // used to push a preset and a stale preset could leave the engine at one
@@ -188,7 +192,7 @@ function statusSnapshot() {
     on: state.on, live: state.live, tapping: state.tapping,
     likes: state.likes, tapsFail: state.tapsFail, tapTarget: state.tapTarget,
     loggedIn: state.loggedIn,
-    error: state.lastError, streamer: STREAMER, port: PORT,
+    error: state.on ? state.lastError : state.bootError, streamer: STREAMER, port: PORT,
     speed: { ...state.speed }, perMin,
     // Where it is actually tapping. "tapping @handle" used to be a claim; the
     // URL is evidence, and it is the one thing that catches an engine sitting
@@ -573,7 +577,7 @@ async function pump() {
     watchTikFinity();
   }
   if (!process.argv.includes("--login-only")) {
-    await launch().catch(e => { state.lastError = e.message; log("launch failed: " + e.message); });
+    await launch().catch(e => { state.bootError = e.message; log("launch failed: " + e.message); });
   }
   // keep alive
   setInterval(() => {}, 1 << 30);

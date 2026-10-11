@@ -70,12 +70,12 @@
   const clearBtn = document.getElementById("clearBtn");
   const retryBtn = document.getElementById("retryBtn");
   const pollStatusEl = document.getElementById("pollStatus");
-  const summaryBtn = document.getElementById("summaryBtn");
   // Session is one button now, not six rows: the summary is built on demand
   // and the only thing left on screen is how long this session has run.
   const sessStatusEl = document.getElementById("sessStatus");
-  const summaryOut = document.getElementById("summaryOut");
   const summaryText = document.getElementById("summaryText");
+  const sessSay = document.getElementById("sessSay");
+  const SESS_SAY = sessSay ? sessSay.textContent : "";
 
   const statViewers  = document.getElementById("statViewers");
   const statLikes    = document.getElementById("statLikes");
@@ -212,19 +212,20 @@
   let bridgeSocket = null;
 
   // like engine: PC auto-liker (auto-liker.js) exposing a local control API
-  // on :8787. The toggle here drives POST /on | /off; going live auto-starts
-  // tapping when the toggle is on (the engine itself watches liveness too).
+  // on :8787. ONE button starts and stops it, so the control shows which state
+  // it is in; it stays disabled until the stream is really live, because a like
+  // control only exists on a live room. Nothing auto-starts any more: the
+  // engine still stops itself when the stream ends, which is the guard that
+  // matters, but starting is a deliberate press.
   const LIKE_PORT = 8787;
-  let likeOn = false;
   let likePoll = null;
-  let likeWanted = false;      // last state we asked the engine for
   // The tap cadence is NOT a dock setting any more: auto-liker.js owns it, at
   // about 2 taps a second. The dock asks for nothing and reads the real figure
   // back from /status (perMin), so the two can never disagree. The presets and
   // the /config speed push that used to live here are what left the engine at
   // one tap per 15 seconds when a saved preset went stale.
   let likeConfigPushed = false;   // engine already has our handle
-  const likeOnCheck = document.getElementById("likeOn");
+  const likeToggleBtn = document.getElementById("likeToggle");
   const likeStatusEl = document.getElementById("likeStatus");
   const likeHint = document.getElementById("likeHint");
 
@@ -264,7 +265,6 @@
           goal: { ...goal },
           welcomed,
           updAuto,
-          likeOn: likeOnCheck && likeOnCheck.checked
         },
         // session numbers belong to the feed dock; the controls dock must
         // not clobber them with its own (possibly empty) counters
@@ -309,7 +309,7 @@
         }
         if (typeof s.settings.welcomed === "boolean") welcomed = s.settings.welcomed;
         if (typeof s.settings.updAuto === "boolean") updAuto = s.settings.updAuto;
-        if (typeof s.settings.likeOn === "boolean" && likeOnCheck) likeOnCheck.checked = s.settings.likeOn;
+
         if (Array.isArray(s.settings.filters)) { filters.clear(); s.settings.filters.forEach(x => filters.add(x)); }
         // NOTE: sheet-accordion state (which sections are expanded) is
         // deliberately NOT persisted — every load starts fully collapsed.
@@ -1354,37 +1354,35 @@
   }
 
   const likeErrEl = document.getElementById("likeErr");
-
-  // Both docks drive ONE engine, and each OBS browser source only read the
-  // saved tick at boot. Two open docks therefore disagreed and alternately
-  // switched the engine off and on every 10 seconds - the tick looked
-  // completely dead while the log filled with ON/OFF/OFF/ON. Re-read the
-  // shared setting on each poll so the most recent human decision wins.
-  let likeOnSeen = null;
-  let likeEngineRun = null;   // startedAt of the engine run we last spoke to
   let likeStateSeen = null;   // last status object the engine reported
 
-  function syncLikeFromStore() {
-    let s;
-    try { s = JSON.parse(localStorage.getItem(LS_KEY) || "null"); } catch { return; }
-    if (!s || !s.settings) return;
-    if (typeof s.settings.likeOn === "boolean" && s.settings.likeOn !== likeOnSeen) {
-      likeOnSeen = s.settings.likeOn;
-      if (likeOnCheck && likeOnCheck.checked !== likeOnSeen) {
-        likeOnCheck.checked = likeOnSeen;
-        likeConfigPushed = false;
-      }
-    }
+  // The button IS the state readout: one press starts, the same press stops,
+  // and the label always says which one it will do. There is no saved setting
+  // to restore, because the engine's own answer is the truth — a restarted
+  // engine is simply off, and the button says so.
+  function paintLikeButton(st) {
+    if (!likeToggleBtn) return;
+    const on = !!(st && st.on);
+    const live = !!(st && st.live);
+    likeToggleBtn.textContent = on ? "Stop auto-like" : "Start auto-like";
+    likeToggleBtn.className = "sheetBtn " + (on ? "keyDanger" : "sheetBtnGo");
+    // Stop is always available; start needs a live room, because that is the
+    // only place a like button exists at all.
+    likeToggleBtn.disabled = !on && !live;
+    likeToggleBtn.title = !on && !live
+      ? "Go live first — likes only count on a live room"
+      : (on ? "Stop tapping likes from account 2" : "Start tapping likes from account 2");
   }
 
   function renderLikeState(st) {
     likeStateSeen = st;
+    paintLikeButton(st);
     if (!st) {
-      // Say so in the collapsed header, not only inside the section: a tick
-      // that silently does nothing looks exactly like a broken toggle.
+      // Say so in the collapsed header, not only inside the section: an engine
+      // that is not running looks exactly like a toggle that does nothing.
       likeStatusEl.textContent = "not running";
       likeStatusEl.className = "sStatus bad";
-      likeHint.hidden = !likeOnCheck.checked;
+      likeHint.hidden = false;
       if (likeErrEl) likeErrEl.hidden = true;
       return;
     }
@@ -1433,67 +1431,38 @@
   }
 
   async function pollLike() {
-    syncLikeFromStore();
     const st = await likeFetch("/status");
     renderLikeState(st);
-    if (!st) { likeWanted = false; likeConfigPushed = false; likeEngineRun = null; return; }
+    if (!st) { likeConfigPushed = false; return; }
     // Demo mode reports a scripted stream, and its fake host is not a real
     // handle: pushing it taught the engine to tap @demo.host and saved that to
     // disk, which is why a real stream then looked like a broken like button.
     // While the demo is running, watch the engine but never steer it.
     if (demoMode) return;
 
-    // Push our intent when the engine is a NEW run (SETUP.bat restarted it,
-    // so its tick is back to off) — or when it has never answered us. Two
-    // open docks must not keep re-asserting different answers at each other:
-    // the last HUMAN click wins, not whichever window polled last.
-    const freshEngine = likeEngineRun === null || st.startedAt !== likeEngineRun;
-    if (freshEngine) likeEngineRun = st.startedAt;
-    if (freshEngine && likeOnCheck.checked !== st.on) {
-      await likeFetch(likeOnCheck.checked ? "/on" : "/off", "POST");
-    }
-
     // A handle we know and the engine does not is out of sync — push it right
-    // away rather than waiting for the next poll.
+    // away rather than waiting for the next poll. The engine needs it before
+    // the first tap, and the button is gated on the stream being live anyway.
     if (!likeConfigPushed || (streamerUid && st.streamer !== streamerUid)) {
       await pushLikeConfig();
     }
   }
 
-  likeOnCheck.addEventListener("change", async () => {
-    // record our own intent so the shared-state re-read does not treat it
-    // as somebody else's change and bounce it back
-    likeOnSeen = likeOnCheck.checked;
-    // An explicit click always wins: it goes straight to the engine, and
-    // from here on no dock re-asserts over it, because the engine is no
-    // longer a fresh run to either of them.
-    const st = await likeFetch(likeOnCheck.checked ? "/on" : "/off", "POST");
-    likeWanted = likeOnCheck.checked && !!st;
-    renderLikeState(st);
-    scheduleSave();
+  // Start / stop. Only reachable while the button is enabled, which the engine
+  // status controls: no live stream, no start.
+  likeToggleBtn.addEventListener("click", async () => {
+    const on = !!(likeStateSeen && likeStateSeen.on);
+    if (!on && !(likeStateSeen && likeStateSeen.live)) {
+      paintLikeButton(likeStateSeen);           // refuses, and shows why on hover
+      return;
+    }
+    const st = await likeFetch(on ? "/off" : "/on", "POST");
+    if (st) renderLikeState(st);
+    else pollLike();                            // no answer: show the truth
   });
-
-  syncLikeFromStore();       // start from the other dock's decision, not ours
 
   pollLike();
   likePoll = setInterval(pollLike, 10000);
-
-  // going live auto-starts the engine's tapping (if toggle on); the engine
-  // also self-pauses when the stream ends — this is belt and braces
-  const _origAddEvent = addEvent;
-  addEvent = function(eventName, data, demo) {
-    // Scripted demo events must not drive the real engine: the demo's "live"
-    // state used to switch tapping ON and leave it clicking a stream that does
-    // not exist. The toggle in the dock still talks to the engine directly —
-    // that one is a human decision, not a replay.
-    if (demoMode) return _origAddEvent(eventName, data, demo);
-    if (eventName === "liveStatusChange" && likeOnCheck && likeOnCheck.checked) {
-      const live = liveStatusOf(data);
-      // null = unrecognised payload → change nothing, don't stop tapping
-      if (live !== null) likeFetch(live ? "/on" : "/off", "POST");
-    }
-    return _origAddEvent(eventName, data, demo);
-  };
 
   /* ------------------------------------------------------------------ *
    *  Connection — strictly manual (see startEverything below)
@@ -1582,7 +1551,12 @@
 
   document.querySelector(".sheetBody").addEventListener("click", e => {
     const head = e.target.closest(".sHead");
-    if (head) head.parentElement.classList.toggle("closed");
+    if (!head) return;
+    const group = head.parentElement;
+    group.classList.toggle("closed");
+    // Session has no button of its own any more: opening the section is the
+    // request for its summary, so it is built fresh right here.
+    if (group.id === "gSess" && !group.classList.contains("closed")) renderSessionSummary();
   });
 
   /* ------------------------------------------------------------------ *
@@ -2954,33 +2928,32 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
     if (!CONTROLS) sheetEl.hidden = true;
   });
 
-  // Show the summary, don't copy it unasked. Built at click time so it is a
-  // still, current snapshot - numbers that moved while you selected the text
-  // would be worse than slightly stale ones.
-  let summaryOpen = false;
-  let summaryLabelTimer = 0;
-  const summaryLabel = () => (summaryOpen ? "Hide session summary" : "Show session summary");
+  // Opening the Session section is the request for its summary — there is no
+  // second button. It is built here, freshly, both on open and on load, so it
+  // is a still snapshot of this moment rather than a number that keeps moving
+  // while you read or select it.
+  function renderSessionSummary() {
+    if (summaryText) summaryText.textContent = buildSummary();
+  }
+  renderSessionSummary();
 
-  function flashSummaryLabel(text) {
-    clearTimeout(summaryLabelTimer);
-    summaryBtn.textContent = text;
-    summaryLabelTimer = setTimeout(() => { summaryBtn.textContent = summaryLabel(); }, 1400);
+  // Copy is still a bonus. Its feedback borrows the caption line for a moment
+  // instead of keeping a "tap to copy" hint on screen forever.
+  let sessSayTimer = 0;
+  function flashSessSay(text) {
+    if (!sessSay) return;
+    clearTimeout(sessSayTimer);
+    sessSay.textContent = text;
+    sessSayTimer = setTimeout(() => { sessSay.textContent = SESS_SAY; }, 1500);
   }
 
-  summaryBtn.addEventListener("click", () => {
-    summaryOpen = !summaryOpen;
-    summaryOut.hidden = !summaryOpen;
-    clearTimeout(summaryLabelTimer);
-    summaryBtn.textContent = summaryLabel();
-    if (summaryOpen) summaryText.textContent = buildSummary();
-  });
-
-  // The copy is a bonus, so it borrows the button's own label for its moment
-  // of feedback instead of keeping a "tap to copy" line on screen forever.
   summaryText.addEventListener("click", () => {
+    renderSessionSummary();                 // copy the freshest numbers
     const text = summaryText.textContent;
     if (!text) return;
-    writeClipboard(text).then(ok => flashSummaryLabel(ok ? "Copied ✓" : "Select it by hand"));
+    writeClipboard(text).then(ok => flashSessSay(ok
+      ? "Copied ✓"
+      : "Could not copy — select the text by hand"));
   });
 
   /* ---- updates wiring --------------------------------------------------- */

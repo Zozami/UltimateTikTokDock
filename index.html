@@ -8,7 +8,7 @@
        gets re-read when its number changes. You do not have to touch this -
        UPDATE.bat, or the Updates panel in Settings, rewrites all three in lockstep
        on every install (see Update-CacheBust in update.ps1). -->
-  <link rel="stylesheet" href="style.css?v=75">
+  <link rel="stylesheet" href="style.css?v=76">
 </head>
 <body>
   <main class="app">
@@ -175,7 +175,10 @@
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="sBody">
-          <label class="menuCheck"><input type="checkbox" id="likeOn"> <span class="sw red"></span>Auto-like via second account</label>
+          <!-- One button that starts and stops, so the control itself says which
+               state you are in. It stays disabled until the stream is really
+               live, because a like control only exists on a live room. -->
+          <div class="menuRowBtns"><button id="likeToggle" class="sheetBtn sheetBtnGo" type="button" disabled>Start auto-like</button></div>
           <!-- One speed, and it is not a setting: the engine taps about twice a
                second (its own file is the single source of truth for that). The
                line below states the pace and the cost of it instead of offering
@@ -198,16 +201,13 @@
           <span id="sessStatus" class="sStatus"></span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </button>
-        <!-- One button instead of six always-on rows. Most of what those rows
-             said (likes, diamonds) is already on the stat line above the feed,
-             so the rest is cheaper to ask for than to keep on screen. The
-             caption above the button is what makes its purpose obvious -
-             nobody should have to open it to find out what it holds. -->
+        <!-- Opening this section IS the request for its summary, so there is no
+             second button: the header row above is the only control. Numbers
+             are rebuilt each time it opens, so what is on screen is current. -->
         <div class="sBody">
-          <div class="hintLine">This stream in one block: uptime, peak viewers, likes,
+          <div class="hintLine" id="sessSay">This stream in one block: uptime, peak viewers, likes,
             diamonds, top gifters. Still there after you end, until the next one starts.</div>
-          <div class="menuRowBtns"><button id="summaryBtn" class="sheetBtn" type="button">Show session summary</button></div>
-          <div class="sumOut" id="summaryOut" hidden>
+          <div class="sumOut" id="summaryOut">
             <div class="sumText" id="summaryText" title="Click to copy"></div>
           </div>
         </div>
@@ -353,7 +353,7 @@
     </div>
   </div>
 
-  <script src="obs-ws.js?v=75"></script>
-  <script src="app.js?v=75"></script>
+  <script src="obs-ws.js?v=76"></script>
+  <script src="app.js?v=76"></script>
 </body>
 </html>
