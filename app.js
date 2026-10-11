@@ -2576,7 +2576,7 @@ setSessionState("starting", "");
     [6100,  () => addEvent("gift", { giftId: "55", giftName: "Rose", repeatCount: 5, repeatEnd: true, giftType: 1, diamondCount: 1, giftPictureUrl: GIFT_ROSE, userId: "6797", uniqueId: "demo.viewer1", nickname: "DemoViewer1", profilePictureUrl: AV("demo.viewer1") }, true)],
 
     // --- NON-streakable gift (giftType 0): must render immediately, no hold
-    [6600,  () => addEvent("gift", { giftId: "8196", giftName: "Heart", repeatCount: 1, giftType: 0, diamondCount: 1, giftPictureUrl: GIFT_FINGER_HEART, userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0667\uFE0F\u0031\uFE0F\u0031\uFE0F\u0645\u0627\u0644\u0643\u064a", profilePictureUrl: AV("\u0627", "5a3a2e") }, true)],
+    [6600,  () => addEvent("gift", { giftId: "8196", giftName: "Heart", repeatCount: 1, giftType: 0, diamondCount: 1, giftPictureUrl: GIFT_FINGER_HEART, userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0037\u0031\u0031\u0645\u0627\u0644\u0643\u064a", profilePictureUrl: AV("\u0627", "5a3a2e") }, true)],
 
     // --- gift with the giftImage list shape + describe text, first-time gifter
     [7100,  () => addEvent("gift", {
@@ -2584,7 +2584,7 @@ setSessionState("starting", "");
               isNewGifter: true, describe: "sent a Galaxy",
               giftImage: { giftImageurlList: [GIFT_TIKTOK] },
               giftDetails: { giftName: "Galaxy", diamondCount: 1000 },
-              userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0667\uFE0F\u0031\uFE0F\u0031\uFE0F\u0645\u0627\u0644\u0643\u064a",
+              userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0037\u0031\u0031\u0645\u0627\u0644\u0643\u064a",
               profilePictureUrl: AV("\u0627", "5a3a2e")
             }, true)],
 
@@ -2595,16 +2595,16 @@ setSessionState("starting", "");
     [8400,  () => addEvent("roomUser", {
               topViewers: [
                 { user: { uniqueId: "demo.viewer1", nickname: "DemoViewer1" }, coinCount: 5 },
-                { user: { uniqueId: "user927", nickname: "\u0627\u0644\u0667\uFE0F\u0031\uFE0F\u0031\uFE0F\u0645\u0627\u0644\u0643\u064a" }, coinCount: 1001 }
+                { user: { uniqueId: "user927", nickname: "\u0627\u0644\u0037\u0031\u0031\u0645\u0627\u0644\u0643\u064a" }, coinCount: 1001 }
               ],
               topGifterRank: 1, viewerCount: 9, totalUser: 9
             }, true)],
 
     // --- arabic chat from a top gifter, plus a final rapid like burst from a
     // --- second liker (exercises the coalescer with two independent users)
-    [8800,  () => addEvent("chat", { comment: "\u0623\u0633\u062a\u0645\u0631 \u064a\u0627 \u0648\u062d\u0634 \uD83D\uDD25", contentLanguage: "ar", userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0667\uFE0F\u0031\uFE0F\u0031\uFE0F\u0645\u0627\u0644\u0643\u064a", profilePictureUrl: AV("\u0627", "5a3a2e") }, true)],
-    [9000,  () => addEvent("like", { likeCount: 15, totalLikeCount: 189, userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0667\uFE0F\u0031\uFE0F\u0031\uFE0F\u0645\u0627\u0644\u0643\u064a", profilePictureUrl: AV("\u0627", "5a3a2e") }, true)],
-    [9300,  () => addEvent("like", { likeCount: 15, totalLikeCount: 204, userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0667\uFE0F\u0031\uFE0F\u0031\uFE0F\u0645\u0627\u0644\u0643\u064a", profilePictureUrl: AV("\u0627", "5a3a2e") }, true)]
+    [8800,  () => addEvent("chat", { comment: "\u0623\u0633\u062a\u0645\u0631 \u064a\u0627 \u0648\u062d\u0634 \uD83D\uDD25", contentLanguage: "ar", userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0037\u0031\u0031\u0645\u0627\u0644\u0643\u064a", profilePictureUrl: AV("\u0627", "5a3a2e") }, true)],
+    [9000,  () => addEvent("like", { likeCount: 15, totalLikeCount: 189, userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0037\u0031\u0031\u0645\u0627\u0644\u0643\u064a", profilePictureUrl: AV("\u0627", "5a3a2e") }, true)],
+    [9300,  () => addEvent("like", { likeCount: 15, totalLikeCount: 204, userId: "927", uniqueId: "user927", nickname: "\u0627\u0644\u0037\u0031\u0031\u0645\u0627\u0644\u0643\u064a", profilePictureUrl: AV("\u0627", "5a3a2e") }, true)]
   ];
   function startDemo() {
     demoMode = true;
