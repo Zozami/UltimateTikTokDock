@@ -4,6 +4,11 @@ like-streamer.txt
 like-engine-profile/
 *.log
 
+# --- updater (never commit a token, never commit machine state) ---
+update-token.txt
+update-state.json
+.upd-test*/
+
 # --- node ---
 node_modules/
 

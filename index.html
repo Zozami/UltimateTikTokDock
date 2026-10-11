@@ -4,10 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>TikFinity</title>
-  <!-- v= bumps on every release: OBS's browser source caches sub-resources
-       hard, so changing only app.js/style.css would otherwise keep serving
-       the OLD file. Bump this number whenever you ship a change. -->
-  <link rel="stylesheet" href="style.css?v=44">
+  <!-- v= busts OBS's very sticky browser-source cache: a sub-resource only
+       gets re-read when its number changes. You do not have to touch this -
+       UPDATE.bat, or the Updates panel in Settings, rewrites all three in lockstep
+       on every install (see Update-CacheBust in update.ps1). -->
+  <link rel="stylesheet" href="style.css?v=69">
 </head>
 <body>
   <main class="app">
@@ -18,7 +19,7 @@
         <button id="retryBtn" class="retryBtn" type="button" hidden>Reconnect</button>
         <span id="statusText" class="statusText"></span>
         <span id="statusDot" class="dot" title="Disconnected"></span>
-        <button id="menuBtn" class="menuBtn" type="button" title="Settings" aria-haspopup="true">⋮</button>
+        <button id="menuBtn" class="menuBtn" type="button" title="Settings" aria-haspopup="true">⋮<span id="menuBadge" class="menuBadge" hidden></span></button>
       </div>
     </header>
 
@@ -140,7 +141,7 @@
         </div>
       </section>
 
-      <div class="bandLabel">While live</div>
+      <div class="bandLabel">During the stream</div>
 
       <section class="sGroup closed" id="gChat">
         <button class="sHead" type="button">
@@ -216,7 +217,7 @@
         </div>
       </section>
 
-      <div class="bandLabel">What you see</div>
+      <div class="bandLabel">On screen</div>
 
       <section class="sGroup closed" id="gGoal">
         <button class="sHead" type="button">
@@ -238,36 +239,32 @@
         </div>
       </section>
 
+      <!-- One section, not two: the event filters and the two leaderboards
+           answer the same question (what shows up), so splitting them just
+           meant two headers to open for one decision. -->
       <section class="sGroup closed" id="gFeed">
         <button class="sHead" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
-          <span>Feed visibility</span>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="sBody checkGrid">
-          <label class="menuCheck"><input type="checkbox" id="fGift" checked> <span class="sw"></span>Gifts</label>
-          <label class="menuCheck"><input type="checkbox" id="fChat" checked> <span class="sw"></span>Chat</label>
-          <label class="menuCheck"><input type="checkbox" id="fLike" checked> <span class="sw"></span>Likes</label>
-          <label class="menuCheck"><input type="checkbox" id="fFollow" checked> <span class="sw"></span>Follows</label>
-          <label class="menuCheck"><input type="checkbox" id="fSocial" checked> <span class="sw"></span>Social</label>
-          <label class="menuCheck"><input type="checkbox" id="fMember" checked> <span class="sw"></span>Joins</label>
-          <label class="menuCheck"><input type="checkbox" id="fOther" checked> <span class="sw"></span>Other</label>
-        </div>
-      </section>
-
-      <section class="sGroup closed" id="gLb">
-        <button class="sHead" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 17l-1-9 5.5 4L12 5l4.5 7L22 8l-1 9z"/><path d="M4 21h16"/></svg>
-          <span>Leaderboards</span>
+          <span>Feed &amp; boards</span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="sBody">
-          <label class="menuCheck"><input type="checkbox" id="fBoardGifters" checked> <span class="sw gold"></span>Top gifters</label>
-          <label class="menuCheck"><input type="checkbox" id="fBoardLikers" checked> <span class="sw pink"></span>Top likers</label>
+          <div class="checkGrid">
+            <label class="menuCheck"><input type="checkbox" id="fGift" checked> <span class="sw"></span>Gifts</label>
+            <label class="menuCheck"><input type="checkbox" id="fChat" checked> <span class="sw"></span>Chat</label>
+            <label class="menuCheck"><input type="checkbox" id="fLike" checked> <span class="sw"></span>Likes</label>
+            <label class="menuCheck"><input type="checkbox" id="fFollow" checked> <span class="sw"></span>Follows</label>
+            <label class="menuCheck"><input type="checkbox" id="fSocial" checked> <span class="sw"></span>Social</label>
+            <label class="menuCheck"><input type="checkbox" id="fMember" checked> <span class="sw"></span>Joins</label>
+            <label class="menuCheck"><input type="checkbox" id="fOther" checked> <span class="sw"></span>Other</label>
+          </div>
+          <div class="sDiv"></div>
+          <label class="menuCheck"><input type="checkbox" id="fBoardGifters" checked> <span class="sw gold"></span>Top gifters board</label>
+          <label class="menuCheck"><input type="checkbox" id="fBoardLikers" checked> <span class="sw pink"></span>Top likers board</label>
         </div>
       </section>
 
-      <div class="bandLabel">This session</div>
+      <div class="bandLabel">Dock</div>
 
       <section class="sGroup closed" id="gSess">
         <button class="sHead" type="button">
@@ -283,6 +280,26 @@
           <div class="sessRow"><span>Followers gained</span><b id="sessFollow">–</b></div>
           <div class="sessRow"><span>Top gifter</span><b id="sessTop">–</b></div>
           <div class="menuRowBtns"><button id="summaryBtn" class="sheetBtn" type="button">Copy summary</button></div>
+        </div>
+      </section>
+
+      <section class="sGroup closed" id="gUpd">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+          <span>Updates</span>
+          <span id="updStatus" class="sStatus"></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="sBody">
+          <div class="sessRow"><span>Installed</span><b id="updCurrent">—</b></div>
+          <div class="sessRow"><span>Newest</span><b id="updLatest">—</b></div>
+          <div class="menuRowBtns">
+            <button id="updCheckBtn" class="sheetBtn" type="button">Check</button>
+            <button id="updApplyBtn" class="sheetBtn sheetBtnGo" type="button" hidden>Install</button>
+          </div>
+          <label class="menuCheck"><input type="checkbox" id="updAuto" checked> <span class="sw green"></span>Check on open</label>
+          <div class="hintLine" id="updHint" hidden></div>
+          <div class="hintLine" id="updProblem" hidden></div>
         </div>
       </section>
 
@@ -304,13 +321,13 @@
       <ol class="hintSteps wSteps">
         <li>Open <b>TikFinity Desktop</b> and go live on TikTok — the dot in the corner turns <span class="okT">green</span> and events stream in.</li>
         <li>To <b>send chat</b> from this dock, run <b>SETUP.bat</b> once, then point TikFinity at it: Setup → Streamer.bot Connection → <b>127.0.0.1</b> port <b>8080</b>, and tick “Allow Streamer.bot to push messages to TikFinity” under Chatbot.</li>
-        <li>Everything else is automatic. Settings (⋮) has polls, leaderboards, goals, sounds and session stats.</li>
+        <li>Everything else is automatic. <b>Settings (⋮) → Updates</b> keeps the dock itself current.</li>
       </ol>
       <button id="welcomeClose" class="sheetBtn wBtn" type="button">Got it</button>
     </div>
   </div>
 
-  <script src="obs-ws.js?v=12"></script>
-  <script src="app.js?v=67"></script>
+  <script src="obs-ws.js?v=69"></script>
+  <script src="app.js?v=69"></script>
 </body>
 </html>

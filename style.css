@@ -60,7 +60,7 @@ button { font: inherit; }
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   background: #1b1c20;
   flex: none;
@@ -155,7 +155,7 @@ button { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   background: #1b1c20;
 }
@@ -184,27 +184,27 @@ button { font: inherit; }
 /* `hidden` always wins over a component display rule */
 [hidden] { display: none !important; }
 
-/* ---------- band labels ("Go live", "While live", "What you see", …) ----------
-   Small quiet captions that group the accordion into four purposes, so the
-   sheet reads top-to-bottom instead of being nine unrelated rows. */
+/* ---------- band labels ("Go live", "During the stream", …) ----------
+   Small quiet captions that group the accordion by purpose, so the sheet
+   reads top-to-bottom instead of being a list of unrelated rows. */
 .bandLabel {
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: .9px;
+  letter-spacing: .8px;
   text-transform: uppercase;
   color: var(--muted);
   opacity: .85;
   /* same 12px gutter as .sHead / .sBody so captions don't touch the wall */
-  padding: 13px 12px 6px;
+  padding: 9px 12px 4px;
 }
-.sheetBody > .bandLabel:first-child { padding-top: 8px; }
+.sheetBody > .bandLabel:first-child { padding-top: 6px; }
 
 /* ---------- account connect line ---------- */
 .acctLine {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 2px 0 6px;
+  padding: 2px 0 4px;
   font-size: 11.5px;
   color: var(--muted);
 }
@@ -258,7 +258,7 @@ button { font: inherit; }
 .catSuggest .catEmpty { color: var(--dim); padding: 5px 8px; font-size: 11px; }
 
 /* ---------- stream key output block ---------- */
-.keyOut { margin-top: 8px; }
+.keyOut { margin-top: 6px; }
 .keyLine {
   display: flex;
   align-items: center;
@@ -333,12 +333,12 @@ button { font: inherit; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   background: none;
   border: none;
   color: var(--text);
   font: inherit;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .7px;
   text-transform: uppercase;
@@ -354,16 +354,20 @@ button { font: inherit; }
 .sGroup.closed .sBody { display: none; }
 .sGroup.closed .chev { transform: rotate(-90deg); }
 
-.sBody { padding: 2px 12px 10px; }
+.sBody { padding: 0 12px 8px; }
 
 .checkGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+
+/* splits two related groups inside one section (filters vs the boards), so
+   they can share a single header instead of costing one each */
+.sDiv { height: 1px; margin: 7px 0 3px; background: var(--border-soft); }
 
 .sessRow {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  padding: 3px 0;
+  padding: 2px 0;
   font-size: 11.5px;
   color: var(--muted);
 }
@@ -405,7 +409,7 @@ body.controls #sheetClose { display: none; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 0;
+  padding: 4px 0;
   border-radius: 5px;
   font-size: 12px;
   color: var(--text);
@@ -425,6 +429,9 @@ body.controls #sheetClose { display: none; }
 .menuCheck:nth-of-type(6) .sw { background: var(--teal); }
 .menuCheck:nth-of-type(7) .sw { background: var(--blue); }
 .menuCheck .sw.pink { background: var(--pink); }
+/* the board chips sit outside the filter grid, where nth-of-type no longer
+   lines up with them - so they say their own colour outright */
+.menuCheck .sw.gold { background: var(--gold); }
 
 /* Two opt-in ticks on one line: go live in Aitum, and open the TikFinity desk.
  * Independent on purpose - a session can want the vertical stream running with
@@ -466,7 +473,7 @@ body.controls #sheetClose { display: none; }
 .menuInput {
   display: block;
   width: calc(100% - 16px);
-  margin: 4px 8px;
+  margin: 3px 8px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -484,7 +491,7 @@ body.controls #sheetClose { display: none; }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 0;
+  padding: 4px 0;
   font-size: 11.5px;
   color: var(--text);
 }
@@ -511,7 +518,7 @@ body.controls #sheetClose { display: none; }
 
 .menuNum:focus { outline: none; border-color: var(--blue); }
 
-.menuRowBtns { display: flex; gap: 4px; padding: 2px 0 4px; }
+.menuRowBtns { display: flex; gap: 4px; padding: 1px 0 3px; }
 .menuRowBtns .menuItem { flex: 1; text-align: center; }
 .menuItem:disabled { opacity: .45; cursor: default; }
 .menuItem:disabled:hover { background: transparent; }
@@ -1202,7 +1209,7 @@ img.emote {
 }
 
 .hintLine {
-  padding: 2px 0 6px;
+  padding: 2px 0 4px;
   font-size: 10.5px;
   line-height: 1.5;
   color: var(--dim);
@@ -1321,6 +1328,21 @@ body.controls .chatBar { border-top: 1px solid var(--border); }
   40% { opacity: 0.45; }
   100% { opacity: 1; }
 }
+
+/* ---------- update badge on the kebab button ---------- */
+
+.menuBadge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+.menuBtn { position: relative; }
 
 /* ============================================================
    End — responsive blocks must stay above this line

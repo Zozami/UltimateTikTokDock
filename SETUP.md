@@ -56,6 +56,8 @@ TikFinity's local Event API is **read-only** — a web page cannot send chat thr
 | `chat-bridge.ps1` | The chat bridge (PowerShell, zero dependencies) |
 | `SETUP.bat` | The one installer — double-click it. Runs `setup.ps1`, which installs the bridge, checks your stream key token, optionally installs the like engine, verifies everything and prints the remaining clicks |
 | `UNINSTALL.bat` | The mirror image — double-click it to cleanly revert everything `SETUP.bat` installed |
+| `UPDATE.bat` | Updates the dock from GitHub in place — see **Updating** below |
+| `update.ps1`, `version.txt` | The updater itself and the version it reports |
 | `README.md` | Short feature notes |
 
 ### Dock features
@@ -70,6 +72,8 @@ TikFinity's local Event API is **read-only** — a web page cannot send chat thr
 - **Gift alert sounds** — soft blip for gifts, rising fanfare over your big-gift threshold
 - **Session panel** — uptime, peak viewers, likes, diamonds, followers gained, top gifter; one-click copy summary
 - **Settings sync** — both docks stay in sync automatically; state survives OBS restarts (12h)
+- **One settings sheet** — grouped by job (Go live / During the stream / On screen / Dock), each section collapsed until you open it and carrying its own status word in the header
+- **Updates** — checks this repo when the dock opens and installs a new version in one click (Settings → Updates), no re-downloading
 
 ---
 
@@ -98,7 +102,7 @@ To switch accounts, or to sign out on a shared PC, press **Disconnect**. That on
 | Bridge log says "cannot listen on port 8080" | Something else owns 8080 (e.g. real Streamer.bot). Settings (⋮) → **Chat sending** → change the port (e.g. 8090), then update TikFinity's Streamer.bot Connection port to match. |
 | TikFinity "Test Connection" fails | Bridge not running (step 1 above), or wrong IP/port — must be exactly `127.0.0.1` + the dock's configured port. |
 | Messages relay but never reach TikTok chat | The Chatbot toggle (step 3 above) is off, or you're not live. |
-| Dock shows old features after updating files | OBS caches dock pages. Right-click the dock title → **Refresh**, or close/reopen the dock. Also make sure `index.html` points at the current `?v=` number for `app.js` / `style.css` — if you publish an update yourself, bump those two numbers so OBS cannot serve the previous cached copies. |
+| Dock shows old features after updating files | OBS caches dock pages. Right-click the dock title → **Refresh**, or close/reopen the dock. `UPDATE.bat` and the Updates panel bump the `?v=` numbers for you; if you edited the files by hand instead, bump those numbers yourself so OBS cannot serve the previous cached copies. |
 | Viewer count goes blank after pressing "Clear feed" | Fixed in v15+. If you still see it, your dock is running cached files — Refresh the dock. |
 | "Start stream" says no token found | No account is connected. Use **Connect…** in the Stream key section instead of hand-editing files — it validates the token with Streamlabs before saving it. |
 | Category dropdown shows nothing | You need at least 2 characters, and `chat-bridge.ps1` must be running (it asks TikTok's category list). Free-typing still works — the dropdown just makes the category exact. |
@@ -110,6 +114,7 @@ To switch accounts, or to sign out on a shared PC, press **Disconnect**. That on
 | Stream key fails with an approval/eligibility error | That's TikTok's answer, not a dock bug — the account isn't allowed to broadcast yet. The **Check account** button shows the same status before you try. |
 | Live page says **"live will start shortly"** and never plays | TikTok is refusing the broadcast: the RTMP socket connects and is then dropped, and OBS sits in a reconnect loop. The dock now reads OBS's own log to catch this and retries once with a fresh broadcast. If it still says that, press **End stream**, wait about a minute (so TikTok finalises the old one), then **Start stream**. A quick check is OBS's log: healthy pushing means one `Connection to … successful` line and no `Reconnecting in` after it. |
 | Any Stream key button says **helper out of date** | The chat bridge is an older copy than the dock's files — normal after pulling an update, because the old bridge kept the port. Re-run **`SETUP.bat`**; it now detects the old build, swaps it out and restarts it. |
+| A non-English title (Arabic, Cyrillic, CJK, emoji) appears as `?????` on TikTok | The running chat bridge is an older copy — it sent the title in your PC's ANSI code page instead of UTF-8, so every non-ASCII character reached TikTok as a question mark. Re-run **`SETUP.bat`** (the dock will say **helper out of date** until you do) and then Refresh the dock once. |
 | Reconnect doesn't open TikFinity | The **chat bridge must be running** — the dock asks it to launch the app (a browser page can't start programs itself). Look at the footer line: if it says `chat bridge not running — run SETUP.bat`, that's the cause. Double-click `SETUP.bat` once more, then Reconnect. |
 | Nothing happens when I open OBS | By design — the dock is manual now. Click **Reconnect** (or the header dot) and it starts TikFinity and connects. If the launch fails, check `chat-bridge.log`; if the exe moved, set the `TF_TIKFINITY_EXE` environment variable to its full path. |
 | Clicked Reconnect but still "waiting for TikFinity…" | Give it a moment — the dock retries for 90s while TikFinity boots. If it never connects, start TikFinity yourself, click **Connect to live** in it, then click Reconnect again. |
@@ -117,11 +122,41 @@ To switch accounts, or to sign out on a shared PC, press **Disconnect**. That on
 | Dock shows events but you never clicked "Connect to live" | The dock can't do that for you — it's a native button inside TikFinity. You still click it once per stream; Reconnect only opens the app and attaches to it. |
 | Like engine toggle does nothing | The engine isn't running. Start it (`node auto-liker.js`) and check its status line in Settings → Like engine shows "tapping" or "waiting for live". |
 | Like engine stopped liking after I restarted the PC | Run `SETUP.bat` once so it starts with Windows (hidden). |
+| Updates says **bridge too old** | The running chat bridge predates the updater, so it has no `/update/*` routes. Run **`SETUP.bat`** once (it swaps the bridge for the current one), then reload the dock. |
+| Updates says **not on GitHub** | The repo was reachable but has no `version.txt` on the branch yet, so there is nothing to compare. Push the folder once and it works from then on. |
+| Updates says **check failed** and mentions a token | In a git clone this should not happen — the updater uses your git credentials. If it does: check the folder is still a clone and that you are signed in to GitHub. A ZIP download has no `.git`, so it needs a public repo or a read-only (Contents: read) token in `update-token.txt` next to `chat-bridge.ps1` (or `TF_UPDATE_TOKEN`). That file is gitignored — never commit it. |
+| Updates says **no updater** | `update.ps1` is missing from the dock folder. Copy it back in, or download the dock again once. |
+| The dock changed on disk but OBS still shows the old UI | Right-click the dock → **Refresh**. The updater rewrites the `?v=` numbers for you, so a refresh is all that is needed. |
+
+---
+
+## Updating
+
+Once the dock is installed you never download it again. Two ways, same result:
+
+- **In the dock** — Settings (⋮) → **Updates** → *Check for updates*, then **Install**. The dock also checks once when it opens and puts a green dot on the ⋮ button when a new version is waiting.
+- **In the folder** — double-click **`UPDATE.bat`**. Handy switches: `-Check` (look only), `-Force` (reinstall even if the version matches), `-SkipRestart` (leave the bridge running).
+
+What it does, in order:
+
+1. Reads `version.txt` from this repo and compares it with the installed `version.txt`. When this folder is a git clone that read goes over git (`git fetch`); otherwise it goes over HTTPS.
+2. Copies that exact build over this folder — **only files that exist in it**, so nothing is ever deleted. From a clone it is packed straight out of the fetched commit with `git archive`, so the files can never be a different build than the version it just compared.
+3. Skips your own files outright: `slobs-token.txt`, `update-token.txt`, logs, `node_modules/`, `like-engine-profile/`, `.git`.
+4. Reinstalls npm dependencies only if `package.json` actually changed.
+5. Bumps the `?v=` cache numbers in `index.html` (so OBS re-reads `app.js` / `style.css` without you touching anything) and rewrites `update-state.json`.
+6. Restarts the chat bridge — **only the one on its own port**, so a second bridge or another dock folder is left alone — and the dock reloads itself.
+
+Exit codes, for scripting: `0` up to date or applied, `1` failed, `3` an update is available (`-Check`).
+
+> **Live streams:** the bridge restart drops chat sending for a few seconds, so the dock warns and asks before installing while you are live. Nothing else is interrupted — the broadcast itself keeps running.
+
+> **Private repo:** a git clone needs no token — the updater runs `git fetch` against `origin`, which uses the credentials you already push with. Only a folder that is *not* a clone falls back to HTTPS, and a private repo over HTTPS needs a read-only (Contents: read) token in `update-token.txt` next to `chat-bridge.ps1`, or in `TF_UPDATE_TOKEN`. Both are gitignored. A public repo needs no token either way.
 
 ---
 
 ## Privacy / security
 
 - The dock talks only to `localhost` — TikFinity's Event API on port 21213 and the chat bridge on 8080. Nothing leaves your PC except through TikFinity itself.
+- The updater is the one thing that reaches outward, and only to GitHub, to read `version.txt` and (when you install) download the new files. If you use a token for a private repo it is used for that request and nothing else — it is never logged or shown.
 - The bridge listens only on `127.0.0.1`, stores no passwords, and holds no credentials. Sending is authenticated by *your own* TikFinity login, using TikFinity's officially documented Streamer.bot integration.
 - Session data (counters, leaderboards, settings) lives in your browser's localStorage on your PC only.

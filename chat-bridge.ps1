@@ -23,7 +23,7 @@ $ErrorActionPreference = "Stop"
 # answer carries it, so the dock can tell a creator that the helper they
 # are running is an older copy than the page in front of them - which
 # otherwise shows up as a mysterious "could not open browser".
-$script:helperVer = "2026.10.2-2"
+$script:helperVer = "2026.10.11-2"
 
 $logFile = Join-Path $PSScriptRoot "chat-bridge.log"
 function Write-Log([string]$msg) {
@@ -135,7 +135,7 @@ function Complete-Handshake($client) {
 
     # --- helper API (/key/*, /obs/*): always JSON, CORS-open. The dock is on
     # --- file:// inside OBS, so Access-Control-Allow-Origin is required.
-    if ($path -like "*/key/*" -or $path -like "*/obs/*") {
+    if ($path -like "*/key/*" -or $path -like "*/obs/*" -or $path -like "*/update/*") {
       $out = Handle-HelperRequest $path $body
       # Stamp every answer so the dock can spot an out-of-date helper.
       if ($out -is [hashtable]) { $out.helperVer = $script:helperVer }
@@ -370,7 +370,16 @@ function Invoke-Slobs($method, $url, $bodyObj, $tokenOverride) {
   try {
     if ($bodyObj) {
       $json = $bodyObj | ConvertTo-Json -Compress -Depth 5
-      return Invoke-RestMethod -Method $method -Uri $url -Headers $headers -ContentType "application/json" -Body $json -TimeoutSec 25
+      # Hand this a STRING body and Windows PowerShell 5.1 encodes it with the
+      # machine's ANSI code page (Windows-1252 on a normal English box), so
+      # every non-ASCII character in a title - Arabic, Cyrillic, CJK, emoji -
+      # reaches Streamlabs as "?" and TikTok shows a row of question marks.
+      # UTF-8 BYTES are written through untouched, which fixes it. Measured on
+      # 5.1: the string body put 0x3F on the wire, the byte body put the real
+      # UTF-8; the charset alone also worked, so both are done here.
+      return Invoke-RestMethod -Method $method -Uri $url -Headers $headers `
+        -ContentType "application/json; charset=utf-8" `
+        -Body $utf8.GetBytes($json) -TimeoutSec 25
     }
     return Invoke-RestMethod -Method $method -Uri $url -Headers $headers -TimeoutSec 25
   } catch {
@@ -740,6 +749,100 @@ function Get-SlobsCategories($term) {
   return @{ ok = $true; query = $term; categories = $list }
 }
 
+# ---------------------------------------------------------------------------
+# Self-update plumbing.
+#
+# The dock cannot do this on its own: it is a page on file:// inside OBS, so
+# it can neither read version.txt off the disk nor hold a GitHub token. The
+# helper can do both, so the dock asks the helper and the helper reports the
+# same two files the updater (update.ps1) reads and writes:
+#
+#   version.txt        what is installed right now
+#   update-state.json  what the last check found (latest, when, any error)
+#
+# GET  /update/info    instant, no network - reads those two files
+# GET  /update/check   starts update.ps1 -Check in the background
+# GET  /update/apply   installs it (update.ps1 -Apply) and restarts this bridge
+#
+# Checking never blocks this server: the fetching happens in update.ps1's own
+# process, so a slow or dead network cannot stall the live feed or TikFinity.
+# ---------------------------------------------------------------------------
+
+function Get-UpdateState {
+  $st = @{}
+  $sf = Join-Path $PSScriptRoot "update-state.json"
+  if (Test-Path $sf) {
+    try {
+      $j = Get-Content $sf -Raw | ConvertFrom-Json
+      foreach ($p in $j.PSObject.Properties) { $st[$p.Name] = $p.Value }
+    } catch { }
+  }
+  return $st
+}
+
+function Get-InstalledVersion {
+  $vf = Join-Path $PSScriptRoot "version.txt"
+  if (-not (Test-Path $vf)) { return "" }
+  try { return (Get-Content $vf -Raw).Trim() } catch { return "" }
+}
+
+function Get-UpdateInfo {
+  $cur = Get-InstalledVersion
+  $st = Get-UpdateState
+  $latest = [string]$st["latest"]
+  $appliedAt = [string]$st["appliedAt"]
+  $checkedAt = [string]$st["checkedAt"]
+  $err = [string]$st["lastError"]
+  $needsToken = $false
+  try { $needsToken = [bool]$st["needsToken"] } catch { }
+  # How the last check read GitHub: "git" (a clone, so no token needed),
+  # "http" (the plain download route). Empty means it has not got that far.
+  $transport = [string]$st["transport"]
+  # Reachable repo, but nothing on it to compare against yet. Worded apart
+  # from a real failure because the fix is one push, not a debug session.
+  $noVersion = $false
+  try { $noVersion = [bool]$st["noVersion"] } catch { }
+  $updaterHere = Test-Path (Join-Path $PSScriptRoot "update.ps1")
+  # A folder that is a git clone can always reach its own remote, so the
+  # dock can say so before anything is even checked.
+  $isClone = Test-Path (Join-Path $PSScriptRoot ".git")
+  return @{
+    ok              = $true
+    current         = $cur
+    latest          = $latest
+    updateAvailable = [bool]($latest -and ($latest -ne $cur))
+    appliedAt       = $appliedAt
+    checkedAt       = $checkedAt
+    lastError       = $err
+    needsToken      = $needsToken
+    noVersion       = $noVersion
+    transport       = $transport
+    isClone         = $isClone
+    updaterPresent  = $updaterHere
+  }
+}
+
+function Start-Updater($mode) {
+  $upd = Join-Path $PSScriptRoot "update.ps1"
+  if (-not (Test-Path $upd)) {
+    return @{ ok = $false; error = "update.ps1 is missing from this folder - get the newest copy before updating" }
+  }
+  # -BridgePort is this helper's own port, so the updater restarts THIS one and
+  # leaves any other bridge (another OBS instance, another dock folder) alone.
+  $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+         "-File", "`"$upd`"", "-BridgePort", "$Port")
+  if ($mode -eq "apply") { $a += @("-Apply", "-Yes", "-Quiet") }
+  else { $a += @("-Check", "-Quiet") }
+  try {
+    Start-Process powershell.exe -ArgumentList $a -WindowStyle Hidden | Out-Null
+    Write-Log "updater started ($mode)"
+    return @{ ok = $true; running = $true; mode = $mode }
+  } catch {
+    Write-Log "could not start the updater: $($_.Exception.Message)"
+    return @{ ok = $false; error = $_.Exception.Message }
+  }
+}
+
 function Read-Query($path) {
   $q = @{}
   if ($path -and $path.Contains("?")) {
@@ -869,6 +972,9 @@ function Handle-HelperRequest($path, $body) {
     $aud = if ($q["audience"]) { $q["audience"] } else { "0" }
     return Start-SlobsStream $title $cat $aud
   }
+  if ($path -like "*/update/info*")  { return Get-UpdateInfo }
+  if ($path -like "*/update/check*") { return Start-Updater "check" }
+  if ($path -like "*/update/apply*") { return Start-Updater "apply" }
   if ($path -like "*/key/end*") {
     # There is no way to close a Streamlabs session over the API - the
     # tiktok/stream/end route answers every method except OPTIONS with 405.

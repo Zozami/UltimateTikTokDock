@@ -128,6 +128,17 @@
   const bridgeHint = document.getElementById("bridgeHint");
   const cDot = document.getElementById("cDot");
 
+  // Updates
+  const menuBadge = document.getElementById("menuBadge");
+  const updStatusEl = document.getElementById("updStatus");
+  const updCurrentEl = document.getElementById("updCurrent");
+  const updLatestEl = document.getElementById("updLatest");
+  const updCheckBtn = document.getElementById("updCheckBtn");
+  const updApplyBtn = document.getElementById("updApplyBtn");
+  const updAutoCheck = document.getElementById("updAuto");
+  const updHintEl = document.getElementById("updHint");
+  const updProblemEl = document.getElementById("updProblem");
+
   /* ------------------------------------------------------------------ *
    *  State
    * ------------------------------------------------------------------ */
@@ -228,6 +239,7 @@
   // first-run: the welcome card shows once, ever, until dismissed
   let welcomed = false;
   let bridgeState = "bad";       // ok | busy | bad
+  let updAuto = true;            // check GitHub when the dock opens
   let bridgeTimer = null;
   let streamerUid = "";          // set from anchor events, used to dedupe echoes
   const recentOwnSends = new Map();  // text -> timestamp, kills TikTok echo dupes
@@ -255,6 +267,7 @@
           bridgePort: bridgePort,
           goal: { ...goal },
           welcomed,
+          updAuto,
           likeOn: likeOnCheck && likeOnCheck.checked,
           likeSpeed: document.getElementById("likeSpeed") ? document.getElementById("likeSpeed").value : "normal"
         },
@@ -296,6 +309,7 @@
           if (Number.isFinite(+s.settings.goal.target) && +s.settings.goal.target >= 1) goal.target = Math.floor(+s.settings.goal.target);
         }
         if (typeof s.settings.welcomed === "boolean") welcomed = s.settings.welcomed;
+        if (typeof s.settings.updAuto === "boolean") updAuto = s.settings.updAuto;
         if (typeof s.settings.likeOn === "boolean" && likeOnCheck) likeOnCheck.checked = s.settings.likeOn;
         if (s.settings.likeSpeed && LIKE_SPEEDS[s.settings.likeSpeed] && document.getElementById("likeSpeed")) {
           document.getElementById("likeSpeed").value = s.settings.likeSpeed;
@@ -1355,6 +1369,7 @@
   // shared setting on each poll so the most recent human decision wins.
   let likeOnSeen = null, likeSpeedSeen = null;
   let likeEngineRun = null;   // startedAt of the engine run we last spoke to
+  let likeStateSeen = null;   // last status object the engine reported
 
   function syncLikeFromStore() {
     let s;
@@ -1377,6 +1392,7 @@
   }
 
   function renderLikeState(st) {
+    likeStateSeen = st;
     if (!st) {
       // Say so in the collapsed header, not only inside the section: a tick
       // that silently does nothing looks exactly like a broken toggle.
@@ -1841,11 +1857,15 @@
     obsHint.textContent = text;
   }
 
+  // Every helper answer carries the helper's own build stamp (checked with
+  // staleHelper), so an older chat-bridge.ps1 answers can be spotted without
+  // asking a second time.
   async function helperGet(route) {
     try {
       const r = await fetch(`http://127.0.0.1:${bridgePort}${route}`, { cache: "no-store" });
       if (!r.ok) throw 0;
-      return await r.json();
+      const j = await r.json();
+      return j;
     } catch { return null; }
   }
 
@@ -1897,7 +1917,7 @@
   // Must match $script:helperVer in chat-bridge.ps1. If the running helper
   // answers with anything else it is an older copy, so the routes this page
   // expects simply are not there - say that, instead of "failed".
-  const HELPER_VER = "2026.10.2-2";
+  const HELPER_VER = "2026.10.11-2";
 
   const acctDot = document.getElementById("acctDot");
   const acctName = document.getElementById("acctName");
@@ -2203,9 +2223,11 @@ setSessionState("starting", "");
    * through: Streamlabs opened the session, TikTok showed "streaming, no
    * output", and nothing said why. Check up front and say so plainly. */
   let obsOk = false;
+  let obsWhy = "";
 
   function setObsConn(ok, why, soft) {
     obsOk = ok;
+    obsWhy = ok ? "" : (why || "");
     obsConn.hidden = !!ok;          // nothing to say when it is all fine
     obsConn.className = "hintLine" + (soft ? "" : " obsBad");
     obsConn.textContent = why || "";
@@ -2891,6 +2913,7 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
   menuBtn.addEventListener("click", () => {
     sheetEl.hidden = false;
     ensureAudio();
+    renderUpdates();
   });
 
   sheetClose.addEventListener("click", () => { sheetEl.hidden = true; });
@@ -2902,6 +2925,21 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
   });
 
   summaryBtn.addEventListener("click", () => copyText(buildSummary(), summaryBtn, "Copy summary"));
+
+  /* ---- updates wiring --------------------------------------------------- */
+
+  updCheckBtn.addEventListener("click", () => runUpdateCheck());
+  updApplyBtn.addEventListener("click", () => runUpdateApply());
+  updAutoCheck.addEventListener("change", () => {
+    updAuto = updAutoCheck.checked;
+    scheduleSave();
+  });
+  // Keep the panel honest while it is on screen: the bridge and the updater
+  // both change underneath the dock without telling it.
+  setInterval(() => {
+    if (sheetEl.hidden) return;
+    renderUpdates();
+  }, 2500);
 
     for (const [group, check] of Object.entries(filterChecks)) {
       check.addEventListener("change", () => {
@@ -3076,6 +3114,197 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
   userFilterClear.addEventListener("click", () => setUserFilter(null));
 
   /* ------------------------------------------------------------------ *
+   *  Updates — the dock never talks to GitHub itself.
+   *
+   *  This page is loaded from file:// inside OBS: it cannot read version.txt
+   *  off the disk, and it must not hold a token for a private repo. The local
+   *  helper does both, so every call here goes through /update/*. Nothing in
+   *  this file fetches github.com.
+   * ------------------------------------------------------------------ */
+
+  const UPD_POLL_MS = 2500;
+  const UPD_POLL_TRIES = 60;     // ~2.5 min: download, bridge restart, reload
+
+  let updState = {
+    current: "", latest: "", updateAvailable: false, checkedAt: "", appliedAt: "",
+    lastError: "", needsToken: false, noVersion: false, transport: "",
+    isClone: false, updaterPresent: true
+  };
+  let updBusy = false;        // a check or an install is in flight
+  let updInfoOk = null;       // did the last /update/info answer at all
+  let updNote = "";           // transient line, outranks the derived ones
+  let updTimers = [];
+  let updAutoTried = false;
+
+  function clearUpdTimers() {
+    for (const t of updTimers) clearTimeout(t);
+    updTimers = [];
+  }
+
+  function fmtWhen(iso) {
+    if (!iso) return "never";
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return "never";
+    const mins = Math.round((Date.now() - t) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs} h ago`;
+    return `${Math.round(hrs / 24)} d ago`;
+  }
+
+  // Compact by design: two rows and one button row carry the whole panel,
+  // and the "checked when" fact rides at the end of the hint line instead of
+  // owning a row of its own.
+  function renderUpdates() {
+    const cur = updState.current, latest = updState.latest;
+
+    updCurrentEl.textContent = cur || "unknown";
+    // "not checked" only when nothing has been asked yet - after a check that
+    // found no version, a dash is the honest answer rather than a wrong one.
+    updLatestEl.textContent = latest || (updState.checkedAt ? "—" : "not checked");
+
+    let status = "", cls = "";
+    if (updBusy) { status = "working…"; cls = "busy"; }
+    // A bridge that answers the feed but not /update/info is a bridge from
+    // before this feature existed - say that, rather than "not running".
+    else if (updInfoOk === false) {
+      status = bridgeState === "ok" ? "bridge too old" : "bridge not running";
+      cls = "bad";
+    }
+    else if (!updState.updaterPresent) { status = "no updater"; cls = "bad"; }
+    else if (updState.updateAvailable) { status = "update ready"; cls = "ok"; }
+    // Not a failure: the repo is reachable but has nothing to compare with,
+    // which one `git push` fixes. Amber, and worded as a step to take.
+    else if (updState.noVersion) { status = "not on GitHub"; cls = "busy"; }
+    else if (updState.lastError) { status = "check failed"; cls = "bad"; }
+    else if (updState.checkedAt) { status = "up to date"; cls = "ok"; }
+    updStatusEl.textContent = status;
+    updStatusEl.className = `sStatus ${cls}`;
+
+    updApplyBtn.hidden = !updState.updateAvailable;
+    if (latest) updApplyBtn.textContent = `Install ${latest}`;
+    updCheckBtn.disabled = updBusy;
+
+    // The one fact on this whole panel that is invisible everywhere else on
+    // screen, so it also rides on the kebab button.
+    menuBadge.hidden = !updState.updateAvailable;
+
+    let hint = "";
+    if (updInfoOk === false) {
+      hint = bridgeState === "ok"
+        ? "The chat bridge is running an older copy with no update routes — run SETUP.bat once so it is swapped out, then reload the dock."
+        : "The chat bridge is not running, so updates cannot be checked — run SETUP.bat once in the dock folder.";
+    } else if (!updState.updaterPresent) {
+      hint = "update.ps1 is missing from the dock folder — copy it back in, or re-download the dock once.";
+    } else if (updState.noVersion) {
+      hint = "GitHub has nothing to compare with yet, so there is nothing to install. Push this " +
+        "folder once (version.txt tells the updater which build you are on) and it works from then on.";
+    } else if (updState.needsToken) {
+      hint = "GitHub could not be read at all. A git clone of this folder needs no token — the " +
+        "credentials a push uses are enough — so check that this folder is still a clone and that " +
+        "you are signed in to GitHub. Without a .git folder it needs a public repo, or a read-only " +
+        "token in update-token.txt.";
+    } else if (updState.updateAvailable) {
+      hint = `Version ${latest} is on GitHub. Installing replaces the dock's own files, keeps your ` +
+        "tokens, logs and settings, restarts the chat bridge, then reloads this page.";
+    } else if (updState.lastError) {
+      hint = updState.lastError;
+    }
+    // "checked 5 min ago" rides along at the end of the hint instead of
+    // owning a row of its own: it is the least urgent fact on the panel.
+    const when = (updState.checkedAt && !updBusy) ? `Checked ${fmtWhen(updState.checkedAt)}.` : "";
+    const full = hint ? `${hint} ${when}`.trim() : when;
+    updHintEl.hidden = !full;
+    updHintEl.textContent = full;
+
+    const liveNow = lastLiveState === true;
+    const problem = updNote || ((updState.updateAvailable && liveNow)
+      ? "You are live — install after the stream, so restarting the bridge cannot interrupt chat sending."
+      : "");
+    updProblemEl.hidden = !problem;
+    updProblemEl.textContent = problem;
+  }
+
+  async function refreshUpdateInfo() {
+    const r = await helperGet("/update/info");
+    updInfoOk = !!r;
+    if (r) updState = Object.assign(updState, r);
+    return r;
+  }
+
+  // Poll until done() is satisfied, then hand over. The bridge is DOWN for a
+  // few seconds in the middle of an install, so a missing answer here is
+  // normal and must not be reported as a failure.
+  function watchUpdate(done, label, onDone) {
+    clearUpdTimers();
+    updBusy = true;
+    renderUpdates();
+    let left = UPD_POLL_TRIES;
+    const tick = async () => {
+      const r = await refreshUpdateInfo();
+      if (r && done(r)) {
+        updBusy = false;
+        renderUpdates();
+        if (onDone) onDone();
+        return;
+      }
+      renderUpdates();
+      if (--left <= 0) {
+        updBusy = false;
+        updNote = `${label} did not finish. Run UPDATE.bat in the dock folder to see why.`;
+        renderUpdates();
+        return;
+      }
+      updTimers.push(setTimeout(tick, UPD_POLL_MS));
+    };
+    updTimers.push(setTimeout(tick, 1200));
+  }
+
+  async function runUpdateCheck() {
+    if (updBusy) return;
+    clearUpdTimers();
+    updNote = "";
+    const before = updState.checkedAt;
+    const r = await helperGet("/update/check");
+    if (!r || r.ok === false) {
+      updInfoOk = false;
+      updNote = (r && r.error) ? String(r.error)
+        : "The chat bridge is not running, so nothing can be checked — run SETUP.bat.";
+      renderUpdates();
+      return;
+    }
+    watchUpdate(st => !!st.checkedAt && st.checkedAt !== before, "The version check");
+  }
+
+  async function runUpdateApply() {
+    if (updBusy || !updState.updateAvailable) return;
+    if (lastLiveState === true &&
+        !confirm("You are live.\n\nInstalling restarts the chat bridge, which drops chat sending " +
+                 "for a few seconds.\n\nInstall now?")) return;
+    clearUpdTimers();
+    const target = updState.latest;
+    const before = updState.appliedAt;
+    updNote = `Installing ${target}… the dock reloads itself when it is done.`;
+    const r = await helperGet("/update/apply");
+    if (!r || r.ok === false) {
+      updNote = (r && r.error) ? String(r.error)
+        : "Could not start the update — is the chat bridge running?";
+      renderUpdates();
+      return;
+    }
+    watchUpdate(
+      st => (!!st.appliedAt && st.appliedAt !== before) || (!!st.current && st.current === target),
+      "The install",
+      () => {
+        updNote = `Installed ${target} — reloading the dock…`;
+        renderUpdates();
+        setTimeout(() => location.reload(), 800);
+      }
+    );
+  }
+
+  /* ------------------------------------------------------------------ *
    *  Boot
    * ------------------------------------------------------------------ */
 
@@ -3085,6 +3314,7 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
   soundCheck.checked = soundOn;
   soundBigInput.value = soundBig;
   bridgePortInput.value = bridgePort;
+  updAutoCheck.checked = updAuto;
   goalOnCheck.checked = goal.on;
   goalTypeSel.value = goal.type;
   goalTargetInput.value = goal.target;
@@ -3109,6 +3339,14 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
 
   // first-run welcome: show until dismissed, remember forever after
   if (!welcomed) welcomeEl.hidden = false;
+
+  // Show what is installed straight away, then (unless the creator turned it
+  // off) ask GitHub once in the background. The check runs in the helper's
+  // own process, so a slow network cannot stall the live feed.
+  refreshUpdateInfo().then(() => {
+    renderUpdates();
+    if (updAuto && !updAutoTried) { updAutoTried = true; runUpdateCheck(); }
+  });
 
   // debug/testing hook (console-only, invisible in the UI)
   window.__testAdd = addEvent;
