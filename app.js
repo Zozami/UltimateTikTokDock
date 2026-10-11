@@ -152,7 +152,6 @@
 
   let itemCount = 0;
   let sessionTotal = 0;
-  const groupCounts = { gift: 0, chat: 0, like: 0, follow: 0, social: 0, member: 0, roomUser: 0, other: 0 };
   const filters = { gift: true, chat: true, like: true, follow: true, social: true, member: true, roomUser: true, other: true };
 
   let viewers = null;
@@ -1032,7 +1031,6 @@
     if (!firstEventAt) firstEventAt = now;
     lastEventAt = now;
     sessionTotal++;
-    groupCounts[group]++;
 
     // read the count off every event before any early return below
     const vcChanged = ingestViewerCount(data);
@@ -2649,6 +2647,12 @@ setSessionState("starting", "");
     if (demoSep) demoSep.hidden = true;
     demoInfo.classList.remove("demoOn");
     demoBtn.textContent = "Demo data";
+    // Starting the demo closed the real connector, so every row, counter and
+    // name on screen while it ran came from the script. Stopping it throws the
+    // sample session away rather than letting the first real stream inherit a
+    // demo host, 1,001 demo followers and a demo "chatbot is off" flag.
+    clearStreamIdentity();
+    clearAll(true);
     connect();
   }
 
@@ -2737,6 +2741,7 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
     "message and throws it away (it toasts \"Streamer.bot sent a chat message, " +
     "but your chatbot is switched off\"). In TikFinity turn the Chatbot toggle ON - " +
     "Setup > Chatbot - and this sends immediately.";
+const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
 
   function setChatState(mode, tooltip) {
     bridgeState = mode;
@@ -2760,6 +2765,16 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
       chatStatus.textContent = "chatbot off in TikFinity";
       chatStatus.title = CHATBOT_OFF_MSG;
       if (bridgeHint) { bridgeHint.hidden = true; }
+      return;
+    }
+    // ...and back again. The warning has a way OUT: flipping the toggle ON in
+    // TikFinity (its next state_update says so), or throwing a demo session
+    // away, must clear the line. Without this the dock kept accusing you of a
+    // switched-off chatbot for the rest of the stream.
+    if (bridgeState === "ok") {
+      chatStatus.className = "sStatus ok";
+      chatStatus.textContent = "connected";
+      chatStatus.title = CHAT_OK_MSG;
     }
   }
 
@@ -2773,7 +2788,7 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
 
     ws.addEventListener("open", () => {
       if (bridgeSocket !== ws) return;
-      setChatState("ok", "Chat bridge connected — messages will reach TikTok chat");
+      setChatState("ok", CHAT_OK_MSG);
     });
     ws.addEventListener("message", ev => {
       if (bridgeSocket !== ws) return;
@@ -3041,6 +3056,27 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
   // describe the stream that is still running. Only a genuine new stream
   // (offline → live) resets those, because then they describe a different
   // stream with a different audience.
+  // Forget everything the dock LEARNED about the room: who the streamer is,
+  // their follower total, the milestone already announced, the last live /
+  // offline state, and TikFinity's chatbot toggle. Used when the whole session
+  // is discarded (stop demo), because a value that only ever arrived inside
+  // the replay is worse than no value at all: it would leave the next real
+  // stream celebrating a demo's follower milestone and the chat panel blocked
+  // by a chatbot state nobody set.
+  function clearStreamIdentity() {
+    streamerUid = "";
+    streamerName = "";
+    streamerAvatar = "";
+    streamerFollowers = 0;
+    milestoneHit = 0;
+    lastLiveState = null;
+    chatbotOn = null;
+    likeRows.clear();
+    recentOwnSends.clear();
+    renderChatSendState();
+    updateHud();
+  }
+
   function clearAll(newStream = false) {
     setUserFilter(null);
     recentOwnSends.clear();
