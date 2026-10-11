@@ -8,7 +8,7 @@
        gets re-read when its number changes. You do not have to touch this -
        UPDATE.bat, or the Updates panel in Settings, rewrites all three in lockstep
        on every install (see Update-CacheBust in update.ps1). -->
-  <link rel="stylesheet" href="style.css?v=74">
+  <link rel="stylesheet" href="style.css?v=75">
 </head>
 <body>
   <main class="app">
@@ -176,15 +176,12 @@
         </button>
         <div class="sBody">
           <label class="menuCheck"><input type="checkbox" id="likeOn"> <span class="sw red"></span>Auto-like via second account</label>
-          <div class="menuRow">Speed
-            <select id="likeSpeed" class="menuSel">
-              <option value="calm">Calm · ~5/min</option>
-              <option value="normal" selected>Normal · ~11/min</option>
-            <option value="fast">Fast · ~29/min</option>
-            <option value="turbo">Turbo · ~75/min</option>
-            </select>
-          </div>
-          <div class="hintLine" id="likeRate" hidden></div>
+          <!-- One speed, and it is not a setting: the engine taps about twice a
+               second (its own file is the single source of truth for that). The
+               line below states the pace and the cost of it instead of offering
+               a menu of speeds nobody could predict. -->
+          <div class="hintLine">About 2 likes a second while you are live — one fixed speed, nothing to tune.
+            At that pace account 2 is the one TikTok would limit, and automated liking breaks their rules.</div>
           <div class="hintLine hintBad" id="likeErr" hidden></div>
           <div class="hintLine" id="likeHint" hidden>
             Engine not reachable. Run <b>SETUP.bat</b> once, then<br>
@@ -356,7 +353,7 @@
     </div>
   </div>
 
-  <script src="obs-ws.js?v=74"></script>
-  <script src="app.js?v=74"></script>
+  <script src="obs-ws.js?v=75"></script>
+  <script src="app.js?v=75"></script>
 </body>
 </html>

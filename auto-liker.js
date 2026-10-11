@@ -2,8 +2,9 @@
  * TikFinity Dock — Like Engine (PC auto-liker, second account)
  * ------------------------------------------------------------
  * Drives your real Chrome/Edge, logged in as your SECOND TikTok
- * account, and taps Like on your own live stream at a slow,
- * randomized, human-ish cadence while your stream is live.
+ * account, and taps Like on your own live stream while your stream
+ * is live — one fixed cadence, about 2 taps a second (see TAP_MIN_MS),
+ * lightly jittered so the rhythm is not a metronome.
  *
  *   node auto-liker.js            → normal start (hidden browser)
  *   node auto-liker.js --login    → ONE-TIME visible login window:
@@ -24,9 +25,10 @@
  * never taps when you're offline.
  *
  * Risk note (be honest with yourself): this automates your second
- * account from the same IP as the stream. Keep the cadence slow, keep
- * using your phone auto-clicker too, and accept that automated liking
- * is against TikTok ToS — account 2 carries the risk.
+ * account from the same IP as the stream, and 2 taps a second is a
+ * LOT of them over a two-hour stream. Automated liking is against
+ * TikTok ToS and fast liking is what gets an account rate-limited —
+ * account 2 carries that risk, so use it deliberately.
  */
 
 const { chromium } = require("playwright-core");
@@ -36,6 +38,16 @@ const http = require("http");
 const WebSocket = require("ws");
 
 const PORT = 8787;
+// ~2 taps a second = one tap every 500ms, jittered by ±50ms. The gap is the
+// WAIT, not the whole period: delivering a real click costs ~60ms of its own
+// (measured against a mock room), so the band sits below 500ms and the taps
+// that actually land come out at 2/s. Measured that way: ~120/min.
+const TAP_MIN_MS = 380;
+const TAP_MAX_MS = 480;
+// What one delivered click costs on top of the wait (measured against a mock
+// room, and it varies with the page). Only used to quote an honest nominal
+// rate before there are enough real taps to measure one.
+const CLICK_COST_MS = 60;
 const PROFILE_DIR = path.join(__dirname, "like-engine-profile");
 const LOG = path.join(__dirname, "like-engine.log");
 // Whose stream to tap. Left blank on purpose: it is learned from TikFinity's
@@ -58,8 +70,11 @@ let state = {
   tapTarget: "",      // which selector/page we were actually on
   lastError: "",
   loggedIn: false,
-  // delay between taps — dock-tunable via POST /config
-  speed: { minMs: 3000, maxMs: 8000 }
+  // Delay between taps. ONE fixed speed, deliberately not tunable: the dock
+  // used to push a preset and a stale preset could leave the engine at one
+  // tap per 15 seconds and look broken. TAP_MIN_MS/TAP_MAX_MS are the whole
+  // story now.
+  speed: { minMs: TAP_MIN_MS, maxMs: TAP_MAX_MS }
 };
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -82,7 +97,7 @@ function setStreamer(handle, source) {
     fs.writeFileSync(HANDLE_FILE, h, "utf8");
   } catch { }
   // do not wait for the next tap tick to find out we can finally navigate
-  if (page && !/\/@[^/]+\/live/.test(page.url() || "")) goLive().catch(() => {});
+  if (page && pageHandle !== h) goLive(h).catch(() => {});
   return true;
 }
 
@@ -101,6 +116,8 @@ function log(msg) {
 }
 
 /* ---------------- control API ---------------- */
+
+let warnedSpeedPush = false;
 
 function readBody(req) {
   return new Promise(resolve => {
@@ -136,35 +153,47 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.url === "/config" && req.method === "POST") {
     const b = await readBody(req);
-    const min = Number(b.minMs), max = Number(b.maxMs);
-    let changed = false;
-    if (Number.isFinite(min)) {
-      const v = Math.max(250, Math.min(60000, min));
-      if (v !== state.speed.minMs) { state.speed.minMs = v; changed = true; }
-    }
-    if (Number.isFinite(max)) {
-      const v = Math.max(state.speed.minMs + 200, Math.min(120000, max));
-      if (v !== state.speed.maxMs) { state.speed.maxMs = v; changed = true; }
+    // minMs/maxMs are accepted but IGNORED: the cadence is fixed in this file
+    // (TAP_MS). A dock left open from before the change keeps pushing its old
+    // preset, and honouring it is exactly how the engine ended up at one tap
+    // per 15 seconds. Say so once, then stay quiet about it.
+    if ((Number.isFinite(Number(b.minMs)) || Number.isFinite(Number(b.maxMs))) && !warnedSpeedPush) {
+      warnedSpeedPush = true;
+      log(`ignoring a speed push (${b.minMs}-${b.maxMs}ms) — this engine runs one fixed cadence`);
     }
     // The dock sends the handle on every config push; only say something
     // when it is actually new, or the log fills with identical lines.
     if (b.streamer) setStreamer(String(b.streamer), "dock");
-    if (changed) log(`speed set: ${(state.speed.minMs / 1000).toFixed(1)}-${(state.speed.maxMs / 1000).toFixed(1)}s between taps`);
     return done(statusSnapshot());
   }
   res.statusCode = 404; done({ error: "not found" });
 });
 
 function statusSnapshot() {
-  const perMin = state.speed.maxMs > 0
-    ? Math.round(60000 / ((state.speed.minMs + state.speed.maxMs) / 2)) : 0;
+  // Report the rate that is actually being DELIVERED, not the nominal one the
+  // gap implies: each real click costs ~60ms of its own, so the nominal figure
+  // (140/min) ran ahead of the truth (120/min) and the dock showed the wrong
+  // number to the person deciding how hard account 2 is being pushed.
+  let perMin = 0;
+  if (tapTimes.length >= 2) {
+    const span = tapTimes[tapTimes.length - 1] - tapTimes[0];
+    if (span > 0) perMin = Math.round(60000 / (span / (tapTimes.length - 1)));
+  }
+  if (!perMin) {
+    perMin = state.speed.maxMs > 0
+      ? Math.round(60000 / ((state.speed.minMs + state.speed.maxMs) / 2 + CLICK_COST_MS)) : 0;
+  }
   return {
     startedAt: state.startedAt,
     on: state.on, live: state.live, tapping: state.tapping,
     likes: state.likes, tapsFail: state.tapsFail, tapTarget: state.tapTarget,
     loggedIn: state.loggedIn,
     error: state.lastError, streamer: STREAMER, port: PORT,
-    speed: { ...state.speed }, perMin
+    speed: { ...state.speed }, perMin,
+    // Where it is actually tapping. "tapping @handle" used to be a claim; the
+    // URL is evidence, and it is the one thing that catches an engine sitting
+    // on the wrong room while reporting success.
+    room: page ? (page.url() || "") : ""
   };
 }
 
@@ -230,6 +259,26 @@ function watchTikFinity() {
 let browser = null;
 let page = null;
 let tapLoop = null;
+// WHICH room is currently open in the browser. The old code only asked "is the
+// URL shaped like /@someone/live", which any handle satisfies — so once the
+// dock pushed a wrong handle (demo data did exactly that) the engine sat on
+// that room forever, found no like button, and still reported every "tap" as a
+// success. Remembering the handle we navigated for is what catches that.
+let pageHandle = "";
+
+// Dev-only escape hatch so the tap path can be exercised without a live
+// stream: TF_LIVE_URL=http://127.0.0.1:8085/room . Loopback only, on purpose —
+// this must never become a way to point the engine at somebody else's room.
+const LIVE_URL_OVERRIDE = (() => {
+  const u = String(process.env.TF_LIVE_URL || "").trim();
+  if (!u) return "";
+  if (!/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i.test(u)) {
+    log("TF_LIVE_URL ignored — only a loopback http(s) URL is allowed (got: " + u + ")");
+    return "";
+  }
+  log("TF_LIVE_URL override in use: " + u + " (no real stream will be tapped)");
+  return u;
+})();
 
 async function launch() {
   if (browser) return;
@@ -253,9 +302,40 @@ async function launch() {
   log(`browser up — loggedIn=${state.loggedIn} (use --login once if false)`);
 }
 
-// Open the broadcaster's live room, once we know who they are.
-async function goLive() {
-  await page.goto(`https://www.tiktok.com/@${STREAMER}/live`, { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => {});
+// Is the open page the room we mean to tap? Handle-aware, unlike the old
+// "does the URL look like /@someone/live" test that any handle satisfied.
+function onRoom(h) {
+  const u = (page && page.url()) || "";
+  if (LIVE_URL_OVERRIDE) return u.startsWith(LIVE_URL_OVERRIDE);
+  const safe = String(h).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp("/@" + safe + "/live(\\?|$|/)", "i").test(u);
+}
+
+// Open the broadcaster's live room, once we know who they are. Returns true
+// only when the room actually loaded, so a failed navigation is not mistaken
+// for "we are on the right page".
+let navigating = null;
+async function goLive(handle) {
+  // One navigation at a time: a new handle arrives (dock push) at the same
+  // moment the tap tick notices the room is wrong, and two goto() calls in
+  // flight meant loading the same room twice on every change.
+  if (navigating) return navigating;
+  navigating = (async () => {
+    const h = String(handle || STREAMER || "").replace(/^@/, "");
+    if (!h || !page) return false;
+    pageHandle = "";                      // no valid room until this succeeds
+    const url = LIVE_URL_OVERRIDE || `https://www.tiktok.com/@${h}/live`;
+    const r = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => null);
+    if (!r) return false;
+    pageHandle = h;
+    // Give the room a moment to build its UI. The like button sits in the chat
+    // bar and appears with the rest of the player, so waiting for it here makes
+    // the first tap land instead of failing once per navigation.
+    const sel = await findLikeButton(4000);
+    if (!sel) log("opened " + url + " but found no like button yet — " + await describePage());
+    return true;
+  })();
+  try { return await navigating; } finally { navigating = null; }
 }
 
 function findChrome() {
@@ -274,21 +354,26 @@ async function hasLoginCookie(ctx) {
   return cookies.some(c => c.name === "sessionid" || c.name === "sessionid_ss");
 }
 
-// TikTok changes the web live room's markup regularly, so try the known
-// shapes in order and remember which one worked. A tick that finds none of
-// them says so instead of quietly doing nothing - that silence is exactly
-// how the engine looked broken for a week.
+// TikTok changes the web live room's markup regularly, so the known shapes are
+// tried in order and the one that worked is remembered. The first entry is not
+// a guess: on a real live room it is the only like control that exists today
+// (38x38, in the chat bar next to the input), while every older selector
+// matched NOTHING — which is precisely why the engine used to "tap" without
+// ever liking anything. The rest are kept as harmless fallbacks for other
+// surfaces and locales.
 const LIKE_SELECTORS = [
+  '[data-e2e="room-chat-like-btn"]',
   '[data-e2e="like-icon"]',
   '[data-e2e="browser-live-like-icon"]',
   '[data-e2e="live-like-icon"]',
   '[data-e2e="likeButton"]',
-  'button[aria-label*="like" i]',
-  '[role="button"][aria-label*="like" i]'
+  '[aria-label*="like" i][role="button"]',
+  'button[aria-label*="like" i]'
 ];
 
 let workedSelector = null;      // learned once, reused
 let reportedMissing = false;    // log the "not found" diagnosis only once
+let tapTimes = [];              // the last few taps, to report a measured rate
 
 async function describePage() {
   // Evidence beats guessing: if every selector misses, say what the page
@@ -296,37 +381,73 @@ async function describePage() {
   try {
     const e2es = await page.$$eval("[data-e2e]", els =>
       Array.from(new Set(els.map(e => e.getAttribute("data-e2e")))).slice(0, 25)).catch(() => []);
-    return `url=${page.url()} data-e2e=[${e2es.join(",")}]`;
+    const videos = await page.locator("video").count().catch(() => 0);
+    return `url=${page.url()} video=${videos} data-e2e=[${e2es.join(",")}]`;
   } catch {
     return `url=${(page && page.url()) || "?"}`;
   }
 }
 
+// Look for a like control, retrying briefly: right after a navigation the room
+// is still building itself, and giving up on the first look is how a working
+// engine reports "no button" on the very tap that should have landed.
+async function findLikeButton(waitMs = 2500) {
+  if (!page) return null;
+  const list = workedSelector ? [workedSelector, ...LIKE_SELECTORS] : LIKE_SELECTORS;
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    for (const sel of list) {
+      try {
+        const loc = page.locator(sel).first();
+        if (!(await loc.count())) continue;
+        // A hidden one is a template or an off-screen duplicate; clicking it
+        // would count as a tap that nobody ever sees.
+        if (!(await loc.isVisible())) continue;
+        if (workedSelector !== sel) {
+          workedSelector = sel;
+          log("like button found: " + sel);
+        }
+        return sel;
+      } catch { /* detached mid-lookup - try the next one */ }
+    }
+    if (Date.now() >= deadline) return null;
+    await sleep(250);
+  }
+}
+
+// A tap counts ONLY when a real like control was found and a real mouse click
+// was delivered to it. The old version finished by pressing the "l" key and
+// returning success no matter what was on screen, so the dock showed "88 sent"
+// while not one like existed. A failure count is honest; a fake success is not.
 async function tapLike() {
   if (!page) return false;
-  const list = workedSelector ? [workedSelector, ...LIKE_SELECTORS] : LIKE_SELECTORS;
-  for (const sel of list) {
-    try {
-      const btn = page.locator(sel).first();
-      if (!(await btn.count())) continue;
-      await btn.click({ timeout: 2500, force: true });
-      if (workedSelector !== sel) {
-        workedSelector = sel;
-        log("like button found: " + sel);
-      }
-      return true;
-    } catch (e) {
+  const sel = await findLikeButton(1200);
+  if (!sel) {
+    state.lastError = "no like button on the room — " + ((page.url() || "?").slice(0, 90));
+    if (!reportedMissing) {
+      reportedMissing = true;
+      log("no like button matched any selector - " + await describePage());
+    }
+    return false;
+  }
+  reportedMissing = false;
+  const btn = page.locator(sel).first();
+  try {
+    // A real click at the element's centre: TikTok's handler listens for
+    // pointer/mouse events, so a synthetic dispatch could bounce off.
+    await btn.click({ timeout: 2000 });
+  } catch {
+    // Usually an overlay (cookie banner, chat menu) covering the button.
+    try { await btn.click({ timeout: 2000, force: true }); }
+    catch (e) {
       state.lastError = String(e.message || e).slice(0, 160);
+      return false;
     }
   }
-  // No button matched. The L key still works on web live when the player has
-  // focus, but say plainly which situation we are in.
-  if (!reportedMissing) {
-    reportedMissing = true;
-    log("no like button matched any selector - " + await describePage());
-  }
-  try { await page.keyboard.press("l"); return true; }
-  catch (e) { state.lastError = String(e.message || e).slice(0, 160); return false; }
+  tapTimes.push(Date.now());
+  if (tapTimes.length > 20) tapTimes.shift();
+  state.lastError = "";
+  return true;
 }
 
 async function tapLoopTick() {
@@ -341,11 +462,17 @@ async function tapLoopTick() {
     scheduleNext();
     return;
   }
-  const url = page.url();
-  if (!/\/@[^/]+\/live/.test(url)) {
-    await goLive();
-    // give the room a moment to render before hunting for its buttons
-    await sleep(2500);
+  // Are we on THIS handle's room? The handle can change under us (the dock
+  // pushing the right one after demo data pushed a wrong one), so compare
+  // handles, never "does the URL look like a live room".
+  if (pageHandle !== STREAMER || !onRoom(STREAMER)) {
+    const opened = await goLive();
+    if (!opened) {
+      state.tapsFail++;
+      if (!state.lastError) state.lastError = "could not open the live room for @" + STREAMER;
+      scheduleNext();
+      return;
+    }
   }
   const ok = await tapLike();
   if (ok) {
@@ -353,8 +480,8 @@ async function tapLoopTick() {
     state.lastError = "";
     if (state.likes === 1) log("first tap landed on " + STREAMER);
     // one line a minute is enough to tell "tapping" from "doing nothing"
-    else if (state.likes % Math.max(1, Math.round(60000 / ((state.speed.minMs + state.speed.maxMs) / 2))) === 0) {
-      log("taps so far: " + state.likes + " (" + state.tapsFail + " failed)");
+    else if (state.likes % 120 === 0) {
+      log("taps so far: " + state.likes + " (" + state.tapsFail + " failed, ~" + statusSnapshot().perMin + "/min)");
     }
   } else {
     state.tapsFail++;
@@ -436,7 +563,15 @@ async function loginFlow() {
 
 async function pump() {
   server.listen(PORT, "127.0.0.1", () => log(`control API on http://127.0.0.1:${PORT}`));
-  watchTikFinity();
+  if (LIVE_URL_OVERRIDE) {
+    // Dev mock room (see TF_LIVE_URL): its URL needs no handle, and there is
+    // no TikFinity to ask about liveness — so the engine is "live" as soon as
+    // the dock says ON, and the tap path can be measured off-stream.
+    if (!STREAMER) STREAMER = "loopback-test";
+    state.live = true;
+  } else {
+    watchTikFinity();
+  }
   if (!process.argv.includes("--login-only")) {
     await launch().catch(e => { state.lastError = e.message; log("launch failed: " + e.message); });
   }

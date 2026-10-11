@@ -75,7 +75,7 @@ Releasing an update is one line: bump `version.txt`, commit, and push. Everythin
 
 ## 👍 Like engine (optional)
 
-SETUP.bat offers it: logs a **second** TikTok account in on this PC and taps Like on your own stream while you're live — the PC version of a phone auto-clicker. Speed dial from Calm (~5/min) to Turbo (~75/min), randomized so it never looks mechanical.
+SETUP.bat offers it: logs a **second** TikTok account in on this PC and taps Like on your own stream while you're live — the PC version of a phone auto-clicker. One fixed pace, no dial to get wrong: about **2 likes a second** (measured ~1.9/s), jittered so it never looks mechanical. It only ever taps the room the dock tells it you are streaming, and it counts a tap only when a real like button was actually clicked.
 
 > ⚠️ **Honest risk note:** automated liking breaks TikTok's ToS. Account 2 carries the risk — never your main.
 

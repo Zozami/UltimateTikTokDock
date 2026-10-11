@@ -218,15 +218,12 @@
   let likeOn = false;
   let likePoll = null;
   let likeWanted = false;      // last state we asked the engine for
-  let likeSpeedPushed = false; // engine already has our chosen cadence
-  // tap cadence presets (ms between taps) — declared here because
-  // restoreState() reads the saved preset before the like-engine block runs
-  const LIKE_SPEEDS = {
-    calm:   { minMs: 7000,  maxMs: 15000 },
-    normal: { minMs: 3000,  maxMs: 8000 },
-    fast:   { minMs: 1200,  maxMs: 3000 },
-    turbo:  { minMs: 400,   maxMs: 1200 }
-  };
+  // The tap cadence is NOT a dock setting any more: auto-liker.js owns it, at
+  // about 2 taps a second. The dock asks for nothing and reads the real figure
+  // back from /status (perMin), so the two can never disagree. The presets and
+  // the /config speed push that used to live here are what left the engine at
+  // one tap per 15 seconds when a saved preset went stale.
+  let likeConfigPushed = false;   // engine already has our handle
   const likeOnCheck = document.getElementById("likeOn");
   const likeStatusEl = document.getElementById("likeStatus");
   const likeHint = document.getElementById("likeHint");
@@ -267,8 +264,7 @@
           goal: { ...goal },
           welcomed,
           updAuto,
-          likeOn: likeOnCheck && likeOnCheck.checked,
-          likeSpeed: document.getElementById("likeSpeed") ? document.getElementById("likeSpeed").value : "normal"
+          likeOn: likeOnCheck && likeOnCheck.checked
         },
         // session numbers belong to the feed dock; the controls dock must
         // not clobber them with its own (possibly empty) counters
@@ -282,7 +278,11 @@
           streamerFollowers,
           milestoneHit,
           streamerName,
-          streamerUid,
+          // NOTE: streamerUid is deliberately NOT saved. It is the handle the
+          // like engine taps, and a demo replay (or a mistyped run) must not be
+          // able to survive a restart as "who you are". The dock now only ever
+          // tells the engine about a handle the real connector announced while
+          // this page was open.
           gifterTotals: [...gifterTotals],
           likerTotals: [...likerTotals]
         }
@@ -310,9 +310,6 @@
         if (typeof s.settings.welcomed === "boolean") welcomed = s.settings.welcomed;
         if (typeof s.settings.updAuto === "boolean") updAuto = s.settings.updAuto;
         if (typeof s.settings.likeOn === "boolean" && likeOnCheck) likeOnCheck.checked = s.settings.likeOn;
-        if (s.settings.likeSpeed && LIKE_SPEEDS[s.settings.likeSpeed] && document.getElementById("likeSpeed")) {
-          document.getElementById("likeSpeed").value = s.settings.likeSpeed;
-        }
         if (Array.isArray(s.settings.filters)) { filters.clear(); s.settings.filters.forEach(x => filters.add(x)); }
         // NOTE: sheet-accordion state (which sections are expanded) is
         // deliberately NOT persisted — every load starts fully collapsed.
@@ -327,7 +324,6 @@
         if (Number.isFinite(s.session.streamerFollowers)) streamerFollowers = s.session.streamerFollowers;
         if (Number.isFinite(s.session.milestoneHit)) milestoneHit = s.session.milestoneHit;
         if (typeof s.session.streamerName === "string") streamerName = s.session.streamerName;
-        if (typeof s.session.streamerUid === "string") streamerUid = s.session.streamerUid;
         for (const [k, v] of s.session.gifterTotals || []) gifterTotals.set(k, v);
         for (const [k, v] of s.session.likerTotals || []) likerTotals.set(k, v);
       }
@@ -1357,9 +1353,6 @@
     } catch { return null; }
   }
 
-  // tap cadence presets live up top (see LIKE_SPEEDS near the like state)
-  const likeSpeedSel = document.getElementById("likeSpeed");
-  const likeRateEl = document.getElementById("likeRate");
   const likeErrEl = document.getElementById("likeErr");
 
   // Both docks drive ONE engine, and each OBS browser source only read the
@@ -1367,7 +1360,7 @@
   // switched the engine off and on every 10 seconds - the tick looked
   // completely dead while the log filled with ON/OFF/OFF/ON. Re-read the
   // shared setting on each poll so the most recent human decision wins.
-  let likeOnSeen = null, likeSpeedSeen = null;
+  let likeOnSeen = null;
   let likeEngineRun = null;   // startedAt of the engine run we last spoke to
   let likeStateSeen = null;   // last status object the engine reported
 
@@ -1379,14 +1372,7 @@
       likeOnSeen = s.settings.likeOn;
       if (likeOnCheck && likeOnCheck.checked !== likeOnSeen) {
         likeOnCheck.checked = likeOnSeen;
-        likeSpeedPushed = false;
-      }
-    }
-    if (s.settings.likeSpeed && LIKE_SPEEDS[s.settings.likeSpeed] && s.settings.likeSpeed !== likeSpeedSeen) {
-      likeSpeedSeen = s.settings.likeSpeed;
-      if (likeSpeedSel.value !== likeSpeedSeen) {
-        likeSpeedSel.value = likeSpeedSeen;
-        likeSpeedPushed = false;
+        likeConfigPushed = false;
       }
     }
   }
@@ -1415,38 +1401,33 @@
     likeStatusEl.textContent = bits.join(" · ");
 
     // "tapping" with no handle used to mean tapping nothing at all, and
-    // nothing on screen said so. Spell out why, in full, right here.
+    // nothing on screen said so. Spell out why, in full, right here — and put
+    // the engine's own sentence first, because it names the room it is on.
     let why = "";
     if (st.tapping && !st.streamer) {
       why = "Ticking a stream it cannot find — the engine has no handle for " +
         "you, so it is clicking nothing. Go live once with this dock open " +
         "(it sends the handle itself), or set TF_STREAMER to your @name.";
-    } else if (st.tapping && st.likes === 0 && st.tapsFail > 2) {
-      why = "Tapping is failing — the like button on TikTok's web live room " +
-        "is not where the engine expects it (" + st.tapsFail + " failed " +
-        "clicks). See like-engine.log for the page it actually saw.";
     } else if (st.error) {
-      why = st.error;
+      why = st.error + (st.tapsFail ? ` (${st.tapsFail} failed attempts)` : "") +
+        " — is the stream live, and account 2 still signed in? See like-engine.log for the page it saw.";
+    } else if (st.tapping && st.likes === 0 && st.tapsFail > 2) {
+      why = "Tapping is failing (" + st.tapsFail + " clicks that did not land). " +
+        "See like-engine.log for the page the engine actually saw.";
     }
     if (likeErrEl) {
       likeErrEl.hidden = !why;
       likeErrEl.textContent = why;
     }
-
-    if (st.perMin && st.perMin > 25) {
-      likeRateEl.hidden = false;
-      likeRateEl.textContent = "Fast speeds push account 2 harder — more risk of restriction.";
-    } else {
-      likeRateEl.hidden = true;
-    }
   }
 
-  async function pushLikeSpeed() {
-    const p = LIKE_SPEEDS[likeSpeedSel.value] || LIKE_SPEEDS.normal;
-    // streamerUid rides along: the dock already knows who the host is from
-    // the anchor events, and the engine's own learning has never managed it.
-    const st = await likeFetch("/config", "POST", Object.assign({ streamer: streamerUid || undefined }, p));
-    likeSpeedPushed = !!st;
+  // Only the handle is pushed. The cadence lives in auto-liker.js, so there is
+  // no speed to send and nothing for a stale dock to get wrong.
+  async function pushLikeConfig() {
+    // streamerUid rides along: the dock already knows who the host is from the
+    // anchor events, and the engine's own learning has never managed it.
+    const st = await likeFetch("/config", "POST", { streamer: streamerUid || undefined });
+    likeConfigPushed = !!st;
     if (st) renderLikeState(st);
     return st;
   }
@@ -1455,7 +1436,12 @@
     syncLikeFromStore();
     const st = await likeFetch("/status");
     renderLikeState(st);
-    if (!st) { likeWanted = false; likeSpeedPushed = false; likeEngineRun = null; return; }
+    if (!st) { likeWanted = false; likeConfigPushed = false; likeEngineRun = null; return; }
+    // Demo mode reports a scripted stream, and its fake host is not a real
+    // handle: pushing it taught the engine to tap @demo.host and saved that to
+    // disk, which is why a real stream then looked like a broken like button.
+    // While the demo is running, watch the engine but never steer it.
+    if (demoMode) return;
 
     // Push our intent when the engine is a NEW run (SETUP.bat restarted it,
     // so its tick is back to off) — or when it has never answered us. Two
@@ -1467,15 +1453,10 @@
       await likeFetch(likeOnCheck.checked ? "/on" : "/off", "POST");
     }
 
-    const want = LIKE_SPEEDS[likeSpeedSel.value] || LIKE_SPEEDS.normal;
-    // st.speed is missing when the engine is not the one this dock expects:
-    // without the guard that threw on every poll tick. A handle we know and
-    // the engine does not is also out of sync — push it right away instead
-    // of waiting out the speed check.
-    if (!likeSpeedPushed || !st.speed ||
-      st.speed.minMs !== want.minMs || st.speed.maxMs !== want.maxMs ||
-      (streamerUid && st.streamer !== streamerUid)) {
-      await pushLikeSpeed();
+    // A handle we know and the engine does not is out of sync — push it right
+    // away rather than waiting for the next poll.
+    if (!likeConfigPushed || (streamerUid && st.streamer !== streamerUid)) {
+      await pushLikeConfig();
     }
   }
 
@@ -1492,12 +1473,6 @@
     scheduleSave();
   });
 
-  likeSpeedSel.addEventListener("change", async () => {
-    likeSpeedSeen = likeSpeedSel.value;
-    const st = await pushLikeSpeed();
-    if (st) scheduleSave();
-  });
-
   syncLikeFromStore();       // start from the other dock's decision, not ours
 
   pollLike();
@@ -1507,6 +1482,11 @@
   // also self-pauses when the stream ends — this is belt and braces
   const _origAddEvent = addEvent;
   addEvent = function(eventName, data, demo) {
+    // Scripted demo events must not drive the real engine: the demo's "live"
+    // state used to switch tapping ON and leave it clicking a stream that does
+    // not exist. The toggle in the dock still talks to the engine directly —
+    // that one is a human decision, not a replay.
+    if (demoMode) return _origAddEvent(eventName, data, demo);
     if (eventName === "liveStatusChange" && likeOnCheck && likeOnCheck.checked) {
       const live = liveStatusOf(data);
       // null = unrecognised payload → change nothing, don't stop tapping
