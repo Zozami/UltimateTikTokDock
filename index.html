@@ -8,7 +8,7 @@
        gets re-read when its number changes. You do not have to touch this -
        UPDATE.bat, or the Updates panel in Settings, rewrites all three in lockstep
        on every install (see Update-CacheBust in update.ps1). -->
-  <link rel="stylesheet" href="style.css?v=77">
+  <link rel="stylesheet" href="style.css?v=78">
 </head>
 <body>
   <main class="app">
@@ -68,10 +68,14 @@
     </form>
     <div class="hintLine chatProblem" id="chatHint" hidden></div>
 
+    <!-- The footer speaks only when it has something to add: the event count,
+         a demo badge while a replay is running, and OBS's own numbers when the
+         websocket answers. It used to sit on "· live" permanently, which
+         contradicted the header the moment the dock was disconnected. -->
     <footer class="footer">
       <span id="count">0 events</span>
-      <span class="sep">·</span>
-      <span id="demoInfo">live</span>
+      <span class="sep" id="demoSep" hidden>·</span>
+      <span id="demoInfo" hidden>demo</span>
       <span id="obsStats" class="obsStats" title="OBS output: fps, bitrate, dropped frames" hidden></span>
     </footer>
 
@@ -205,8 +209,11 @@
              second button: the header row above is the only control. Numbers
              are rebuilt each time it opens, so what is on screen is current. -->
         <div class="sBody">
-          <div class="hintLine" id="sessSay">This stream in one block: uptime, peak viewers, likes,
-            diamonds, top gifters. Still there after you end, until the next one starts.</div>
+          <!-- The numbers are right below, so this line carries only what they
+               cannot say for themselves: how long they last, and that the text
+               is copyable. -->
+          <div class="hintLine" id="sessSay">Stays here after you end, until your next stream starts.
+            Click the text to copy it.</div>
           <div class="sumOut" id="summaryOut">
             <div class="sumText" id="summaryText" title="Click to copy"></div>
           </div>
@@ -318,7 +325,7 @@
         </button>
         <div class="sBody">
           <div class="sessRow"><span>Installed</span><b id="updCurrent">—</b></div>
-          <div class="sessRow"><span>Newest</span><b id="updLatest">—</b></div>
+          <div class="sessRow" id="updLatestRow" hidden><span>Newest</span><b id="updLatest">—</b></div>
           <div class="menuRowBtns">
             <button id="updCheckBtn" class="sheetBtn" type="button">Check</button>
             <button id="updApplyBtn" class="sheetBtn sheetBtnGo" type="button" hidden>Install</button>
@@ -353,7 +360,7 @@
     </div>
   </div>
 
-  <script src="obs-ws.js?v=77"></script>
-  <script src="app.js?v=77"></script>
+  <script src="obs-ws.js?v=78"></script>
+  <script src="app.js?v=78"></script>
 </body>
 </html>

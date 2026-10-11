@@ -57,6 +57,7 @@
   const statusText = document.getElementById("statusText");
   const countEl    = document.getElementById("count");
   const demoInfo   = document.getElementById("demoInfo");
+  const demoSep    = document.getElementById("demoSep");
   const obsStatsEl = document.getElementById("obsStats");
   const endpointEl = document.getElementById("endpoint");
   const tgEl       = document.getElementById("topGifters");
@@ -132,6 +133,7 @@
   const updStatusEl = document.getElementById("updStatus");
   const updCurrentEl = document.getElementById("updCurrent");
   const updLatestEl = document.getElementById("updLatest");
+  const updLatestRow = document.getElementById("updLatestRow");
   const updCheckBtn = document.getElementById("updCheckBtn");
   const updApplyBtn = document.getElementById("updApplyBtn");
   const updAutoCheck = document.getElementById("updAuto");
@@ -2615,6 +2617,8 @@ setSessionState("starting", "");
     }
     demoInfo.textContent = "demo";
     demoInfo.classList.add("demoOn");
+    demoInfo.hidden = false;
+    if (demoSep) demoSep.hidden = false;
     demoBtn.textContent = "Stop demo";
     setDot("demo", "Demo replay — events are scripted");
     for (const [delay, fn] of DEMO_STREAM) {
@@ -2641,7 +2645,8 @@ setSessionState("starting", "");
     demoMode = false;
     for (const t of demoTimers) { clearTimeout(t); clearInterval(t); }
     demoTimers = [];
-    demoInfo.textContent = "live";
+    demoInfo.hidden = true;
+    if (demoSep) demoSep.hidden = true;
     demoInfo.classList.remove("demoOn");
     demoBtn.textContent = "Demo data";
     connect();
@@ -3192,7 +3197,11 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
     updCurrentEl.textContent = cur || "unknown";
     // "not checked" only when nothing has been asked yet - after a check that
     // found no version, a dash is the honest answer rather than a wrong one.
+    // The "Newest" row earns its place only when it says something the
+    // Installed row does not: a version that differs, or a check still to run.
+    const showLatest = !!latest && !!cur && latest !== cur;
     updLatestEl.textContent = latest || (updState.checkedAt ? "—" : "not checked");
+    if (updLatestRow) updLatestRow.hidden = !showLatest;
 
     let status = "", cls = "";
     if (updBusy) { status = "working…"; cls = "busy"; }

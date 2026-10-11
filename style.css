@@ -832,6 +832,16 @@ body.controls #sheetClose { display: none; }
   text-overflow: ellipsis;
 }
 
+/* Handles are Arabic, Cyrillic, CJK, emoji — anything. A name's own direction
+   leaks into the numbers and punctuation around it, so "المالكي (1,001)" can
+   read as if the dock formatted the count wrong. Isolating each name keeps it
+   one run and leaves the rest of the line in reading order. */
+.name,
+.bdName,
+#userFilterName {
+  unicode-bidi: isolate;
+}
+
 .name:hover { text-decoration: underline; }
 
 /* row 2: what happened / the message itself */
