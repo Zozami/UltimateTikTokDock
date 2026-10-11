@@ -259,6 +259,9 @@ button { font: inherit; }
 
 /* ---------- stream key output block ---------- */
 .keyOut { margin-top: 6px; }
+/* Nothing to copy yet: hide the two value rows instead of showing "—" twice.
+   obsConn / obsHint are siblings, so a pre-flight OBS warning still shows. */
+.keyOut.keyIdle .keyLine { display: none; }
 .keyLine {
   display: flex;
   align-items: center;
@@ -361,6 +364,67 @@ button { font: inherit; }
 /* splits two related groups inside one section (filters vs the boards), so
    they can share a single header instead of costing one each */
 .sDiv { height: 1px; margin: 7px 0 3px; background: var(--border-soft); }
+
+/* ---------- session summary: revealed on demand ----------
+   The six rows it replaces were mostly duplicated by the stat line above the
+   feed, so they do not earn permanent space - but the summary itself is worth
+   keeping, and it is its own copy button (same idiom as the stream key). */
+.sumOut { margin-top: 6px; }
+.sumText {
+  padding: 7px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.sumText:hover { border-color: var(--blue); }
+
+/* ---------- sub-groups inside one section ----------
+   Used by Connections, which holds three unrelated once-ever things. Quiet
+   enough to read as a caption, so they stay in one section instead of each
+   earning its own row in the accordion. */
+.sSub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0 1px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: .9;
+}
+.sSub .sStatus { margin-left: auto; }
+.sNote {
+  color: var(--dim);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  text-transform: none;
+}
+
+/* the small jump button on the daily path ("Connect"), which appears only
+   when the thing it points at actually needs attention */
+.sGo {
+  margin-left: auto;
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.sGo:hover { color: var(--text); border-color: var(--blue); }
+.sGo[hidden] { display: none; }
 
 .sessRow {
   display: flex;

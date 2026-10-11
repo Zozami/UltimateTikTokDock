@@ -70,18 +70,18 @@ TikFinity's local Event API is **read-only** — a web page cannot send chat thr
 - **Chat poll** — viewers vote by typing 1/2/3… in chat
 - **Followers-gained counter + milestone celebrations** — automatic system rows at 1K/5K/10K… followers
 - **Gift alert sounds** — soft blip for gifts, rising fanfare over your big-gift threshold
-- **Session panel** — uptime, peak viewers, likes, diamonds, followers gained, top gifter; one-click copy summary
+- **Session summary** — Settings → Session is one button: it shows this stream's uptime, peak viewers, likes, diamonds and top gifters in a single block (plus new followers when there are any). Click the text to copy it. Built when you press it; kept until your next stream starts
 - **Settings sync** — both docks stay in sync automatically; state survives OBS restarts (12h)
-- **One settings sheet** — grouped by job (Go live / During the stream / On screen / Dock), each section collapsed until you open it and carrying its own status word in the header
+- **One settings sheet, grouped by when you need it** — **Go live** holds only what you touch every stream (title, category, Start/End). **During the stream**, **On screen**, then **Setup** last, where the once-ever things live: connecting the account, the OBS websocket, the bridge port. Each section is collapsed until you open it
 - **Updates** — checks this repo when the dock opens and installs a new version in one click (Settings → Updates), no re-downloading
 
 ---
 
 ## Connecting a Streamlabs account (only needed to go live from the dock)
 
-Everything in the dock works without this — it only unlocks **Stream key → Start stream**.
+Everything in the dock works without this — it only unlocks **Start stream**.
 
-1. In the dock: **Settings → Stream key → Connect…**. That is the whole click — your browser opens on Streamlabs straight away.
+1. In the dock: **Settings (⋮) → Setup → Connections → Connect…**. That is the whole click — your browser opens on Streamlabs straight away. (It lives here, not in Stream key, because you connect an account once and go live every week. If you are not connected, the Stream key section shows a **Connect** button that jumps straight here.)
 2. Sign in with TikTok (or with Streamlabs, if you already have it) and approve.
 3. The browser lands on a small "Signed in" page — close it and go back to OBS. The dock has already updated by itself: the dot goes green, **Connected as @yourhandle**, and **Start stream** lights up.
 
@@ -99,22 +99,22 @@ To switch accounts, or to sign out on a shared PC, press **Disconnect**. That on
 |---|---|
 | Header dot red / Reconnect button shows | TikFinity Desktop isn't running or you're not live yet. Open it, go live, click **Reconnect**. |
 | Chat bar shakes, nothing sends | The bridge isn't running. Run `SETUP.bat` again, or check `chat-bridge.log` in this folder. |
-| Bridge log says "cannot listen on port 8080" | Something else owns 8080 (e.g. real Streamer.bot). Settings (⋮) → **Chat sending** → change the port (e.g. 8090), then update TikFinity's Streamer.bot Connection port to match. |
+| Bridge log says "cannot listen on port 8080" | Something else owns 8080 (e.g. real Streamer.bot). Settings (⋮) → **Setup → Connections → Chat bridge → Port** (e.g. 8090), then update TikFinity's Streamer.bot Connection port to match. |
 | TikFinity "Test Connection" fails | Bridge not running (step 1 above), or wrong IP/port — must be exactly `127.0.0.1` + the dock's configured port. |
 | Messages relay but never reach TikTok chat | The Chatbot toggle (step 3 above) is off, or you're not live. |
 | Dock shows old features after updating files | OBS caches dock pages. Right-click the dock title → **Refresh**, or close/reopen the dock. `UPDATE.bat` and the Updates panel bump the `?v=` numbers for you; if you edited the files by hand instead, bump those numbers yourself so OBS cannot serve the previous cached copies. |
 | Viewer count goes blank after pressing "Clear feed" | Fixed in v15+. If you still see it, your dock is running cached files — Refresh the dock. |
-| "Start stream" says no token found | No account is connected. Use **Connect…** in the Stream key section instead of hand-editing files — it validates the token with Streamlabs before saving it. |
+| "Start stream" says no token found | No account is connected. Use **Connect…** under Setup → Connections instead of hand-editing files — it validates the token with Streamlabs before saving it. |
 | Category dropdown shows nothing | You need at least 2 characters, and `chat-bridge.ps1` must be running (it asks TikTok's category list). Free-typing still works — the dropdown just makes the category exact. |
-| "Start stream" is greyed out | No account is connected. Press **Connect…** in the Stream key section and paste your Streamlabs token — see "Connecting a Streamlabs account" below. |
+| "Start stream" is greyed out | No account is connected. Press **Connect** on the account line in Stream key (it jumps to the right place), or go to Setup → Connections — see "Connecting a Streamlabs account" below. |
 | Want to change title/category while live? | You cannot, and that is TikTok's doing, not the dock's. Every Streamlabs `stream/start` mints a **brand new broadcast**, and there is no update route (all of them answer 405), so changing the title mid-stream would start a second broadcast and cut the first. The button says **Title locked while live** and your text is kept for the next stream. Press **End stream**, change it, press **Start stream**. |
-| Start stream says **Aitum not updated** | OBS's WebSocket Server is off, or the password in the panel is wrong. Tools → WebSocket Server → enable it, set a password, and put that password (and port 4455) in the Stream key panel. The broadcast session is still live — click **Server** and **Key** to copy them by hand. |
+| Start stream says **Aitum not updated** | OBS's WebSocket Server is off, or the saved password is wrong. Tools → WebSocket Server → enable it, set a password, then put that password (and port 4455) under **Setup → Connections → OBS websocket**. The broadcast session is still live — click **Server** and **Key** to copy them by hand. |
 | Aitum says the plugin isn't there, but it is | The plugin only registers its obs-websocket vendor requests if the websocket server was already loaded when OBS started. **Restart OBS once** (or toggle the plugin off/on in Extensions) and try again. |
 | Vertical streaming with the **Aitum Vertical** plugin | That is what the dock pushes to. The plugin runs its own RTMP service for the 9:16 canvas with its own server + key, so OBS's main Stream settings are never touched. Aitum must be enabled in OBS → Extensions. |
-| Stream key fails with an approval/eligibility error | That's TikTok's answer, not a dock bug — the account isn't allowed to broadcast yet. The **Check account** button shows the same status before you try. |
+| Stream key fails with an approval/eligibility error | That's TikTok's answer, not a dock bug — the account isn't allowed to broadcast yet. **Setup → Connections → Check account** shows the same status before you try. |
 | Live page says **"live will start shortly"** and never plays | TikTok is refusing the broadcast: the RTMP socket connects and is then dropped, and OBS sits in a reconnect loop. The dock now reads OBS's own log to catch this and retries once with a fresh broadcast. If it still says that, press **End stream**, wait about a minute (so TikTok finalises the old one), then **Start stream**. A quick check is OBS's log: healthy pushing means one `Connection to … successful` line and no `Reconnecting in` after it. |
-| Any Stream key button says **helper out of date** | The chat bridge is an older copy than the dock's files — normal after pulling an update, because the old bridge kept the port. Re-run **`SETUP.bat`**; it now detects the old build, swaps it out and restarts it. |
-| A non-English title (Arabic, Cyrillic, CJK, emoji) appears as `?????` on TikTok | The running chat bridge is an older copy — it sent the title in your PC's ANSI code page instead of UTF-8, so every non-ASCII character reached TikTok as a question mark. Re-run **`SETUP.bat`** (the dock will say **helper out of date** until you do) and then Refresh the dock once. |
+| Any Stream key button says **bridge out of date** | The chat bridge is an older copy than the dock's files — normal after pulling an update, because the old bridge kept the port. Re-run **`SETUP.bat`**; it now detects the old build, swaps it out and restarts it. |
+| A non-English title (Arabic, Cyrillic, CJK, emoji) appears as `?????` on TikTok | The running chat bridge is an older copy — it sent the title in your PC's ANSI code page instead of UTF-8, so every non-ASCII character reached TikTok as a question mark. Re-run **`SETUP.bat`** (the dock will say **bridge out of date** until you do) and then Refresh the dock once. |
 | Reconnect doesn't open TikFinity | The **chat bridge must be running** — the dock asks it to launch the app (a browser page can't start programs itself). Look at the footer line: if it says `chat bridge not running — run SETUP.bat`, that's the cause. Double-click `SETUP.bat` once more, then Reconnect. |
 | Nothing happens when I open OBS | By design — the dock is manual now. Click **Reconnect** (or the header dot) and it starts TikFinity and connects. If the launch fails, check `chat-bridge.log`; if the exe moved, set the `TF_TIKFINITY_EXE` environment variable to its full path. |
 | Clicked Reconnect but still "waiting for TikFinity…" | Give it a moment — the dock retries for 90s while TikFinity boots. If it never connects, start TikFinity yourself, click **Connect to live** in it, then click Reconnect again. |

@@ -8,7 +8,7 @@
        gets re-read when its number changes. You do not have to touch this -
        UPDATE.bat, or the Updates panel in Settings, rewrites all three in lockstep
        on every install (see Update-CacheBust in update.ps1). -->
-  <link rel="stylesheet" href="style.css?v=69">
+  <link rel="stylesheet" href="style.css?v=74">
 </head>
 <body>
   <main class="app">
@@ -114,27 +114,22 @@
             <button id="keyGet" class="sheetBtn sheetBtnGo" type="button">Start stream</button>
             <button id="keyEnd" class="sheetBtn keyDanger" type="button" disabled>End stream</button>
           </div>
+          <!-- Account STATE only, never its controls. Connecting is done
+               once, in Setup → Connections, so it does not sit in the path
+               you walk every time you go live. This line stays because
+               going live is impossible without an account, and the jump
+               button appears only when there is something to fix. -->
           <div class="acctLine">
             <span class="acctDot" id="acctDot"></span>
             <span id="acctName">checking account…</span>
-          </div>
-          <div class="menuRowBtns">
-            <button id="keyInfo" class="sheetBtn" type="button">Check account</button>
-            <button id="acctBtn" class="sheetBtn keyDanger" type="button">Connect…</button>
-          </div>
-          <div id="acctForm" hidden>
-            <div class="hintLine" id="acctHint">Only shown when the sign-in could not open a browser. Paste a Streamlabs token you already have, or open the address from the message above yourself.</div>
-            <div class="menuRow">Token <input id="acctToken" class="menuInput" type="password" autocomplete="off" placeholder="Streamlabs token"></div>
-            <div class="menuRowBtns">
-              <button id="acctSave" class="sheetBtn sheetBtnGo" type="button">Save &amp; connect</button>
-            </div>
+            <button id="acctFix" class="sGo" type="button" hidden>Connect</button>
           </div>
           <div class="hintLine" id="keyHint" hidden></div>
-          <div class="keyOut" id="keyOut">
+          <!-- keyIdle by default: there is never a key on a fresh load, so the
+               two value rows start hidden and appear once there is one. -->
+          <div class="keyOut keyIdle" id="keyOut">
             <div class="keyLine"><span>Server</span><b id="keyUrl" class="keyVal keyBlank">—</b></div>
             <div class="keyLine"><span>Key</span><b id="keyVal" class="keyVal keyBlank">—</b></div>
-            <div class="menuRow">OBS ws port <input id="obsPort" class="menuNum" type="number" min="1" max="65535" value="4455"></div>
-            <div class="menuRow">OBS password <input id="obsPass" class="menuInput" type="password" autocomplete="off" placeholder="obs-websocket password"></div>
             <div class="hintLine" id="obsConn" hidden></div>
             <div class="hintLine" id="obsHint" hidden></div>
           </div>
@@ -142,24 +137,6 @@
       </section>
 
       <div class="bandLabel">During the stream</div>
-
-      <section class="sGroup closed" id="gChat">
-        <button class="sHead" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.7-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/></svg>
-          <span>Chat sending</span>
-          <span id="chatStatus" class="sStatus"></span>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="sBody">
-          <div class="menuRow">Bridge port <input id="bridgePort" class="menuNum" type="number" min="1" max="65535" value="8080"></div>
-          <ol class="hintLine hintSteps" id="bridgeHint" hidden>
-            <li>Run SETUP.bat once (in this folder)</li>
-            <li>TikFinity → Setup → Streamer.bot Connection: 127.0.0.1 + this port</li>
-            <li>TikFinity → Chatbot → tick "Allow Streamer.bot to push messages to TikFinity"</li>
-          </ol>
-          <div class="menuRowBtns"><button id="bridgeRetry" class="sheetBtn" type="button">Reconnect bridge</button></div>
-        </div>
-      </section>
 
       <section class="sGroup closed" id="gPoll">
         <button class="sHead" type="button">
@@ -217,6 +194,28 @@
         </div>
       </section>
 
+      <section class="sGroup closed" id="gSess">
+        <button class="sHead" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <span>Session</span>
+          <span id="sessStatus" class="sStatus"></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <!-- One button instead of six always-on rows. Most of what those rows
+             said (likes, diamonds) is already on the stat line above the feed,
+             so the rest is cheaper to ask for than to keep on screen. The
+             caption above the button is what makes its purpose obvious -
+             nobody should have to open it to find out what it holds. -->
+        <div class="sBody">
+          <div class="hintLine">This stream in one block: uptime, peak viewers, likes,
+            diamonds, top gifters. Still there after you end, until the next one starts.</div>
+          <div class="menuRowBtns"><button id="summaryBtn" class="sheetBtn" type="button">Show session summary</button></div>
+          <div class="sumOut" id="summaryOut" hidden>
+            <div class="sumText" id="summaryText" title="Click to copy"></div>
+          </div>
+        </div>
+      </section>
+
       <div class="bandLabel">On screen</div>
 
       <section class="sGroup closed" id="gGoal">
@@ -264,22 +263,52 @@
         </div>
       </section>
 
-      <div class="bandLabel">Dock</div>
+      <div class="bandLabel">Setup</div>
 
-      <section class="sGroup closed" id="gSess">
+      <!-- Everything here is a once-ever visit: connect the account, tell the
+           dock how to reach OBS, point it at the bridge port. It sits last on
+           purpose - the daily path above never has to scroll past it. -->
+      <section class="sGroup closed" id="gConn">
         <button class="sHead" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-          <span>Session</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg>
+          <span>Connections</span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="sBody">
-          <div class="sessRow"><span>Live for</span><b id="sessUp">–</b></div>
-          <div class="sessRow"><span>Peak viewers</span><b id="sessPeak">–</b></div>
-          <div class="sessRow"><span>Likes</span><b id="sessLikes">–</b></div>
-          <div class="sessRow"><span>Diamonds</span><b id="sessDia">–</b></div>
-          <div class="sessRow"><span>Followers gained</span><b id="sessFollow">–</b></div>
-          <div class="sessRow"><span>Top gifter</span><b id="sessTop">–</b></div>
-          <div class="menuRowBtns"><button id="summaryBtn" class="sheetBtn" type="button">Copy summary</button></div>
+          <div class="sSub">Streamlabs account</div>
+          <div class="acctLine">
+            <span class="acctDot" id="acctDot2"></span>
+            <span id="acctName2">checking account…</span>
+          </div>
+          <div class="menuRowBtns">
+            <button id="keyInfo" class="sheetBtn" type="button">Check account</button>
+            <button id="acctBtn" class="sheetBtn keyDanger" type="button">Connect…</button>
+          </div>
+          <div id="acctForm" hidden>
+            <div class="hintLine" id="acctHint">Only shown when the sign-in could not open a browser. Paste a Streamlabs token you already have, or open the address from the message above yourself.</div>
+            <div class="menuRow">Token <input id="acctToken" class="menuInput" type="password" autocomplete="off" placeholder="Streamlabs token"></div>
+            <div class="menuRowBtns">
+              <button id="acctSave" class="sheetBtn sheetBtnGo" type="button">Save &amp; connect</button>
+            </div>
+          </div>
+
+          <div class="sDiv"></div>
+
+          <div class="sSub">OBS websocket <span class="sNote">only to push the key</span></div>
+          <div class="menuRow">Port <input id="obsPort" class="menuNum" type="number" min="1" max="65535" value="4455"></div>
+          <div class="menuRow">Password <input id="obsPass" class="menuInput" type="password" autocomplete="off" placeholder="obs-websocket password"></div>
+
+          <div class="sDiv"></div>
+
+          <div class="sSub">Chat bridge <span id="chatStatus" class="sStatus"></span></div>
+          <div class="menuRow">Port <input id="bridgePort" class="menuNum" type="number" min="1" max="65535" value="8080"></div>
+          <ol class="hintLine hintSteps" id="bridgeHint" hidden>
+            <li>Run SETUP.bat once (in this folder)</li>
+            <li>TikFinity → Setup → Streamer.bot Connection: 127.0.0.1 + this port</li>
+            <li>TikFinity → Chatbot → tick "Allow Streamer.bot to push messages to TikFinity"</li>
+          </ol>
+          <div class="menuRowBtns"><button id="bridgeRetry" class="sheetBtn" type="button">Reconnect bridge</button></div>
+          <div class="hintLine" id="connHint" hidden></div>
         </div>
       </section>
 
@@ -307,7 +336,7 @@
     </div>
 
     <footer class="sheetFoot">
-      <button id="demoBtn" class="sheetBtn" type="button">Demo</button>
+      <button id="demoBtn" class="sheetBtn" type="button" title="Fill the feed with sample events, to check your on-screen layout">Demo data</button>
       <button id="clearBtn" class="sheetBtn" type="button">Clear feed</button>
     </footer>
   </section>
@@ -327,7 +356,7 @@
     </div>
   </div>
 
-  <script src="obs-ws.js?v=69"></script>
-  <script src="app.js?v=69"></script>
+  <script src="obs-ws.js?v=74"></script>
+  <script src="app.js?v=74"></script>
 </body>
 </html>

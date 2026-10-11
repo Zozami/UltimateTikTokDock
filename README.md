@@ -18,7 +18,7 @@ It only **listens** to TikFinity's local API — it can't change or break anythi
 | Likes, follows, joins, shares | Start/stop Aitum from the dock | OBS status bar in the footer: fps · bitrate · dropped % |
 | Top gifters / top likers boards | Gift alert sounds | Chat polls with live tally bars |
 | Viewers · likes · diamonds stat line | Session summary + follower milestones | Survives OBS restarts, demo mode |
-| One settings sheet, grouped by job | **Updates** panel: one click, no re-downloading | Keeps your tokens, logs and settings |
+| Settings grouped by when you need it — the once-ever setup is out of the daily path | **Updates** panel: one click, no re-downloading | Keeps your tokens, logs and settings |
 
 ## ⚡ Quick start
 
@@ -48,7 +48,7 @@ TikFinity Desktop is the event source — the dock needs it running to show anyt
 
 ## 🎬 Going live
 
-1. **Stream key → Connect…** — one click, your browser opens, sign in with Streamlabs. No key-generator apps, nothing to copy.
+1. **Settings → Connections → Connect…** (one time only) — your browser opens, you sign in with Streamlabs. No key-generator apps, nothing to copy. The Stream key panel then only ever shows the account's name.
 2. Type a title, pick a category, hit **Start stream** — it pushes the key into the Aitum vertical canvas, waits until TikTok is *actually* receiving, then attaches TikFinity. One button, full go-live.
 3. **End stream** stops Aitum and clears the key. Keys are per-stream, so it's deliberately never automatic.
 
@@ -56,7 +56,7 @@ TikFinity Desktop is the event source — the dock needs it running to show anyt
 
 Once installed, the dock updates itself from this repo. Either:
 
-- **In the dock:** Settings (⋮) → **Updates** → *Check for updates*, then **Install** — or
+- **In the dock:** Settings (⋮) → **Setup → Updates** → *Check*, then **Install** — or
 - **In the folder:** double-click **`UPDATE.bat`**.
 
 The dock checks when it opens and puts a **green dot on the ⋮ button** when a new version is waiting, so you never have to go looking.

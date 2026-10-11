@@ -71,12 +71,11 @@
   const retryBtn = document.getElementById("retryBtn");
   const pollStatusEl = document.getElementById("pollStatus");
   const summaryBtn = document.getElementById("summaryBtn");
-  const sessUpEl = document.getElementById("sessUp");
-  const sessPeakEl = document.getElementById("sessPeak");
-  const sessLikesEl = document.getElementById("sessLikes");
-  const sessDiaEl = document.getElementById("sessDia");
-  const sessTopEl = document.getElementById("sessTop");
-  const sessFollowEl = document.getElementById("sessFollow");
+  // Session is one button now, not six rows: the summary is built on demand
+  // and the only thing left on screen is how long this session has run.
+  const sessStatusEl = document.getElementById("sessStatus");
+  const summaryOut = document.getElementById("summaryOut");
+  const summaryText = document.getElementById("summaryText");
 
   const statViewers  = document.getElementById("statViewers");
   const statLikes    = document.getElementById("statLikes");
@@ -662,13 +661,9 @@
   // is frequently blocked outright - and a streamer who cannot copy the
   // stream key is stuck. So try the modern API first, fall back to the old
   // synchronous textarea trick, and only give up if both fail.
-  function copyText(text, btn, restore) {
-    const done = ok => {
-      if (!btn) return;
-      const prev = btn.textContent;
-      btn.textContent = ok ? "✓" : "✗";
-      setTimeout(() => { btn.textContent = restore || prev; }, 800);
-    };
+  // Split out from copyText because not every caller has a button to flash:
+  // the session summary is its own copy target and reports through a hint.
+  function writeClipboard(text) {
     const fallback = () => {
       try {
         const ta = document.createElement("textarea");
@@ -685,13 +680,18 @@
       }
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(
-        () => done(true),
-        () => done(fallback())
-      );
-    } else {
-      done(fallback());
+      return navigator.clipboard.writeText(text).then(() => true, () => fallback());
     }
+    return Promise.resolve(fallback());
+  }
+
+  function copyText(text, btn, restore) {
+    const prev = btn ? btn.textContent : "";
+    writeClipboard(text).then(ok => {
+      if (!btn) return;
+      btn.textContent = ok ? "✓" : "✗";
+      setTimeout(() => { btn.textContent = restore || prev; }, 800);
+    });
   }
 
   const initialCache = new Map();
@@ -1547,7 +1547,7 @@
     clearTimeout(reconnectTimer);
     setDot("disconnected", "Not connected — click Reconnect to start");
     retryBtn.hidden = false;
-    endpointEl.textContent = "not started — click Reconnect";
+    setFootStatus("not started — click Reconnect");
   }
 
   function connect() {
@@ -1557,7 +1557,7 @@
     retryBtn.hidden = true;
 
     const endpoint = ENDPOINTS[endpointIndex % ENDPOINTS.length];
-    endpointEl.textContent = endpoint;
+    setFootStatus(endpoint);
     setDot("connecting", "Connecting…");
 
     let ws = null;
@@ -1625,6 +1625,7 @@
   const keyValEl = document.getElementById("keyVal");
   const keyHint = document.getElementById("keyHint");
   const keyEndBtn = document.getElementById("keyEnd");
+  const connHintEl = document.getElementById("connHint");
   const obsPortInput = document.getElementById("obsPort");
   const obsPassInput = document.getElementById("obsPass");
   const obsStartToo = document.getElementById("obsStartToo");
@@ -1743,6 +1744,12 @@
     el.textContent = value || "—";
     el.classList.toggle("keyBlank", !value);
     el.title = value ? `${value}\n\nClick to copy` : "";
+    // Before a stream there is no key yet, so two rows reading "—" are just
+    // height in the middle of the daily path. They appear the moment there is
+    // something to copy. obsConn / obsHint deliberately stay put - reporting
+    // on OBS before you press anything is the whole point of them.
+    const out = document.getElementById("keyOut");
+    if (out) out.classList.toggle("keyIdle", !streamUrl && !streamKey);
   }
   for (const el of [keyUrlEl, keyValEl]) {
     el.addEventListener("click", () => {
@@ -1847,10 +1854,27 @@
 
   function setKeyStatus(text) { keyStatusEl.textContent = text; }
   function setKeyHint(text) {
-    if (!text) { keyHint.hidden = true; return; }
-    keyHint.hidden = false;
+    keyHint.hidden = !text;
     keyHint.textContent = text;
+    // The same sentence, in whichever place the user is looking. Connecting
+    // happens in Connections, but the failure that matters ("TikTok will not
+    // let this account go live") belongs on the go-live path - so both get it
+    // rather than either becoming a dead end.
+    if (connHintEl) {
+      connHintEl.hidden = !text;
+      connHintEl.textContent = text;
+    }
   }
+  // The sheet is a full screen overlay, so the header's status words are
+  // covered while it is open - that is the one job of this line. The raw
+  // websocket URL is a diagnostic, not a status, so when everything is fine
+  // the line gets out of the way instead of trailing under the last section.
+  function setFootStatus(text) {
+    const url = /^wss?:\/\//.test(String(text || ""));
+    endpointEl.hidden = !text || url;
+    endpointEl.textContent = url ? "" : String(text || "");
+  }
+
   function setObsHint(text) {
     if (!text) { obsHint.hidden = true; return; }
     obsHint.hidden = false;
@@ -1890,12 +1914,12 @@
     const info = await helperGet("/key/info");
     if (!info) {
       setKeyStatus("");
-      setKeyHint("Helper not reachable — is chat-bridge.ps1 running? (SETUP.bat)");
+      setKeyHint("Chat bridge not running — double-click SETUP.bat, then reload this page.");
       return;
     }
     if (staleHelper(info)) {
-      setKeyStatus("helper out of date");
-      setKeyHint("The dock is newer than chat-bridge.ps1 — run SETUP.bat again, then reload this page.");
+      setKeyStatus("bridge out of date");
+      setKeyHint("The chat bridge is an older copy than this dock — run SETUP.bat again, then reload this page.");
       return;
     }
     paintAccount(info);
@@ -1926,6 +1950,14 @@
   const acctToken = document.getElementById("acctToken");
   const acctSave = document.getElementById("acctSave");
   const acctHint = document.getElementById("acctHint");
+  // The account is reported in two places on purpose: the short line on the
+  // go-live path (so you can tell at a glance whether Start stream will work)
+  // and the same line beside the controls in Connections (so switching
+  // accounts does not mean guessing whether one is already signed in). One
+  // painting function drives both.
+  const acctDot2 = document.getElementById("acctDot2");
+  const acctName2 = document.getElementById("acctName2");
+  const acctFix = document.getElementById("acctFix");
   let accountOn = false;
 
   function staleHelper(res) {
@@ -1934,10 +1966,17 @@
 
   function paintAccount(info) {
     accountOn = !!(info && info.username);
-    acctDot.className = "acctDot" + (accountOn ? (info.canGoLive ? " ok" : " warn") : "");
-    acctName.textContent = accountOn
+    const dot = "acctDot" + (accountOn ? (info.canGoLive ? " ok" : " warn") : "");
+    const text = accountOn
       ? `Connected as @${info.username}${info.canGoLive ? "" : ' (not allowed to go live)'}`
       : "No account connected";
+    acctDot.className = dot;
+    acctName.textContent = text;
+    if (acctDot2) acctDot2.className = dot;
+    if (acctName2) acctName2.textContent = text;
+    // The jump button is the only thing on the go-live path that points at
+    // the one-time settings, so it shows up exactly when it is needed.
+    if (acctFix) acctFix.hidden = accountOn;
     acctBtn.textContent = accountOn ? "Disconnect" : "Connect…";
     acctBtn.className = "sheetBtn" + (accountOn ? " keyDanger" : " sheetBtnGo");
     acctBtn.disabled = false;
@@ -1951,7 +1990,10 @@
     else {
       accountOn = false;
       acctDot.className = "acctDot";
-      acctName.textContent = "Helper not running";
+      acctName.textContent = "Chat bridge not running";
+      if (acctDot2) acctDot2.className = "acctDot";
+      if (acctName2) acctName2.textContent = "Chat bridge not running";
+      if (acctFix) acctFix.hidden = false;
       acctBtn.disabled = true;
     setSessionState(sessionState);
     }
@@ -1965,13 +2007,18 @@
     const res = await helperGet("/key/disconnect");
     if (!res || res.ok === false) {
       setKeyStatus("disconnect failed");
-      setKeyHint(res && res.error ? String(res.error) : "Helper not reachable");
+      setKeyHint(res && res.error ? String(res.error) : "Chat bridge not running — double-click SETUP.bat");
       return;
     }
     setKeyStatus("disconnected");
     setKeyHint("Account removed from this PC. Start stream is unavailable until you connect again.");
     await refreshAccount();
   });
+
+  // One click from the go-live path to the setting that unblocks it: opens
+  // Setup → Connections and scrolls to it. Shown only while no account is
+  // connected, so it never sits in the way of a normal stream start.
+  acctFix.addEventListener("click", () => openSection("gConn"));
 
   acctSave.addEventListener("click", async () => {
     const token = acctToken.value.trim();
@@ -1983,7 +2030,7 @@
     acctToken.value = "";              // never leave a secret sitting in the field
     if (!res || res.ok === false) {
       setKeyStatus("connect failed");
-      setKeyHint(res && res.error ? String(res.error) : "Helper not reachable — is chat-bridge.ps1 running?");
+      setKeyHint(res && res.error ? String(res.error) : "Chat bridge not running — double-click SETUP.bat");
       return;
     }
     setKeyStatus("connected");
@@ -2021,9 +2068,9 @@
     if (!res || res.ok === false) {
       stopLoginPoll();
       setKeyStatus("could not open browser");
-      if (!res) setKeyHint("Helper not reachable - is chat-bridge.ps1 running? (run SETUP.bat)");
-      else if (staleHelper(res)) setKeyHint("The helper is an older copy and does not know this button. Run SETUP.bat again, then reload the dock.");
-      else setKeyHint(res.error ? String(res.error) : "The helper would not start the sign-in.");
+      if (!res) setKeyHint("Chat bridge not running — double-click SETUP.bat, then reload this page.");
+      else if (staleHelper(res)) setKeyHint("The chat bridge is an older copy than this dock. Run SETUP.bat again, then reload the dock.");
+      else setKeyHint(res.error ? String(res.error) : "The chat bridge would not start the sign-in.");
       // Last resort: let them paste a token they already have.
       acctForm.hidden = false;
       return;
@@ -2090,7 +2137,7 @@ setSessionState("starting", "");
     if (!res || res.ok === false) {
       setSessionState("failed", res && res.error
         ? String(res.error).slice(0, 300)
-        : "Helper not reachable — is chat-bridge.ps1 running? (SETUP.bat)");
+        : "Chat bridge not running — double-click SETUP.bat");
       setKeyStatus("failed");
       return;
     }
@@ -2283,7 +2330,8 @@ setSessionState("starting", "");
     if (!obsPass) {
       setObsConn(false,
         "No OBS password yet. Start stream needs it to push the key into Aitum - " +
-        "Tools > WebSocket Server in OBS, then paste that password here.", true);
+        "Tools > WebSocket Server in OBS, then add that password under " +
+        "Settings (⋮) > Setup > Connections.", true);
       return false;
     }
     try {
@@ -2291,7 +2339,10 @@ setSessionState("starting", "");
       setObsConn(true, "");
       return true;
     } catch (e) {
-      setObsConn(false, `OBS not reachable on port ${obsPort}: ${String(e.message || e)}`);
+      // OBS's own message already names the port it could not reach, so the
+      // old "OBS not reachable on port N: Cannot reach OBS on port N" said it
+      // twice. Keep whichever sentence exists rather than both.
+      setObsConn(false, String(e.message || e) || `OBS not reachable on port ${obsPort}`);
       return false;
     }
   }
@@ -2421,7 +2472,7 @@ setSessionState("starting", "");
 
     // 1. start TikFinity through the bridge (a browser page can't spawn
     //    processes, and the bridge is already running in the background)
-    endpointEl.textContent = "starting TikFinity…";
+    setFootStatus("starting TikFinity…");
     setDot("connecting", "Starting TikFinity Desktop…");
     const bridgeAlive = await requestLaunch();
     if (dead()) return;
@@ -2434,7 +2485,7 @@ setSessionState("starting", "");
       // already running the Event API will still connect below — so this is
       // a warning, not a stop.
       setDot("connecting", "Chat bridge not running — start it with SETUP.bat (TikFinity can't be launched for you)");
-      endpointEl.textContent = "chat bridge not running — run SETUP.bat";
+      setFootStatus("chat bridge not running — run SETUP.bat");
     }
 
     // 3. keep trying the Event API while the app boots
@@ -2445,14 +2496,14 @@ setSessionState("starting", "");
         // connect() repaints the header on every attempt — re-assert the real
         // reason so the dock doesn't just blink "Connecting…" for 90 seconds
         if (!bridgeAlive) {
-          endpointEl.textContent = "chat bridge not running — run SETUP.bat";
+          setFootStatus("chat bridge not running — run SETUP.bat");
           setDot("connecting", "Chat bridge not running — start it with SETUP.bat (TikFinity can't be launched for you)");
         } else {
-          endpointEl.textContent = "waiting for TikFinity…";
+          setFootStatus("waiting for TikFinity…");
         }
       }
       if (socket && socket.readyState === WebSocket.OPEN) {
-        endpointEl.textContent = ENDPOINTS[endpointIndex % ENDPOINTS.length];
+        setFootStatus(ENDPOINTS[endpointIndex % ENDPOINTS.length]);
         return;
       }
       await new Promise(r => setTimeout(r, 1500));
@@ -2461,7 +2512,7 @@ setSessionState("starting", "");
     if (!bridgeAlive) {
       setDot("disconnected", "Chat bridge not running — TikFinity can't be started for you. Run SETUP.bat, then Reconnect again.");
       retryBtn.hidden = false;
-      endpointEl.textContent = "chat bridge not running — run SETUP.bat";
+      setFootStatus("chat bridge not running — run SETUP.bat");
       return;
     }
     showDisconnected();
@@ -2638,7 +2689,7 @@ setSessionState("starting", "");
     demoTimers = [];
     demoInfo.textContent = "live";
     demoInfo.classList.remove("demoOn");
-    demoBtn.textContent = "Demo";
+    demoBtn.textContent = "Demo data";
     connect();
   }
 
@@ -2878,19 +2929,18 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
     return h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`;
   }
 
+  // One word in the header, so the section still says something while it is
+  // collapsed - the same idiom every other section uses.
   function updateSessionPanel() {
-    if (sheetEl.hidden) return;
-    sessUpEl.textContent = firstEventAt ? fmtDur(Date.now() - firstEventAt) : "–";
-    sessPeakEl.textContent = peakViewers ? fmtNum(peakViewers) : "–";
-    sessLikesEl.textContent = totalLikes == null ? "–" : fmtNum(totalLikes);
-    sessDiaEl.textContent = fmtNum(diamonds);
-    sessFollowEl.textContent = followsGained ? `+${fmtNum(followsGained)} today` : "–";
-    const t0 = boardRows(gifterTotals, "coins")[0];
-    sessTopEl.textContent = t0 ? `${t0.name} · ${fmtNum(t0.coins)}` : "–";
+    if (!sessStatusEl) return;
+    sessStatusEl.textContent = firstEventAt ? fmtDur(Date.now() - firstEventAt) : "";
   }
   setInterval(updateSessionPanel, 1000);
 
   function buildSummary() {
+    // Nothing has happened yet this load. A block of dashes reads as broken,
+    // so it says what the button will hold instead.
+    if (!firstEventAt) return "Nothing captured yet — go live and this fills in by itself.";
     const up = firstEventAt ? fmtDur(Date.now() - firstEventAt) : "–";
     const topG = boardRows(gifterTotals, "coins");
     const topL = boardRows(likerTotals, "likes");
@@ -2924,7 +2974,34 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
     if (!CONTROLS) sheetEl.hidden = true;
   });
 
-  summaryBtn.addEventListener("click", () => copyText(buildSummary(), summaryBtn, "Copy summary"));
+  // Show the summary, don't copy it unasked. Built at click time so it is a
+  // still, current snapshot - numbers that moved while you selected the text
+  // would be worse than slightly stale ones.
+  let summaryOpen = false;
+  let summaryLabelTimer = 0;
+  const summaryLabel = () => (summaryOpen ? "Hide session summary" : "Show session summary");
+
+  function flashSummaryLabel(text) {
+    clearTimeout(summaryLabelTimer);
+    summaryBtn.textContent = text;
+    summaryLabelTimer = setTimeout(() => { summaryBtn.textContent = summaryLabel(); }, 1400);
+  }
+
+  summaryBtn.addEventListener("click", () => {
+    summaryOpen = !summaryOpen;
+    summaryOut.hidden = !summaryOpen;
+    clearTimeout(summaryLabelTimer);
+    summaryBtn.textContent = summaryLabel();
+    if (summaryOpen) summaryText.textContent = buildSummary();
+  });
+
+  // The copy is a bonus, so it borrows the button's own label for its moment
+  // of feedback instead of keeping a "tap to copy" line on screen forever.
+  summaryText.addEventListener("click", () => {
+    const text = summaryText.textContent;
+    if (!text) return;
+    writeClipboard(text).then(ok => flashSummaryLabel(ok ? "Copied ✓" : "Select it by hand"));
+  });
 
   /* ---- updates wiring --------------------------------------------------- */
 
@@ -3302,6 +3379,19 @@ const CHATBOT_OFF_MSG = "TikFinity's Chatbot is switched off, so it accepts the 
         setTimeout(() => location.reload(), 800);
       }
     );
+  }
+
+  // Open one section and bring it into view - how the go-live path hands off
+  // to the one-time setup instead of duplicating its controls.
+  function openSection(id) {
+    const g = document.getElementById(id);
+    if (!g) return;
+    if (g.classList.contains("closed")) {
+      const head = g.querySelector(".sHead");
+      if (head) head.click();
+    }
+    const body = g.querySelector(".sBody") || g;
+    try { body.scrollIntoView({ block: "center" }); } catch { }
   }
 
   /* ------------------------------------------------------------------ *
