@@ -417,7 +417,13 @@
       const counts = poll.opts.map((o, i) => ({ o, n: countVotes(i + 1) }));
       const top = Math.max(...counts.map(c => c.n));
       const winners = counts.filter(c => c.n === top && top > 0).map(c => c.o);
-      addEvent("system", { message: `Poll result — ${poll.q} → ${winners.join(" / ")} (${top} vote${top === 1 ? "" : "s"})` }, true);
+      // A poll nobody voted in has no winner, so "→ (0 votes)" was a dangling
+      // arrow announcing nothing. It says what actually happened instead.
+      addEvent("system", {
+        message: top
+          ? `Poll result — ${isoRtl(poll.q)} → ${winners.map(isoRtl).join(" / ")} (${top} vote${top === 1 ? "" : "s"})`
+          : `Poll closed with no votes — ${isoRtl(poll.q)}`
+      }, true);
     }
     poll.opts = [];
     poll.q = "";
@@ -522,6 +528,21 @@
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  /* Some text has to stay one plain string — a feed row's message, which is
+     stored, searched and copied as text, so it cannot hold elements the way a
+     name can hold <bdi>. A handle or a poll question typed in Arabic carries
+     its own direction into the digits and dashes beside it, and the sentence
+     reads as if the dock mis-counted. Pinching just that value between an FSI
+     and a PDI keeps it a single run and leaves the rest of the line in order.
+
+     Applied only when the value really holds right-to-left script, so ordinary
+     ASCII text never picks up invisible characters. */
+  const RTL_RE = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+  function isoRtl(s) {
+    const v = String(s);
+    return RTL_RE.test(v) ? "\u2068" + v + "\u2069" : v;
   }
 
   /* Emotes: subscriber chat carries an emoteList[] of {position/emojiPlace,
@@ -930,7 +951,7 @@
     for (const m of MILESTONES) if (streamerFollowers >= m && m > milestoneHit) best = m;
     if (!best) return;
     milestoneHit = best;
-    addEvent("system", { message: `${streamerName || "Stream"} crossed ${fmtNum(best)} followers` }, true);
+    addEvent("system", { message: `${isoRtl(streamerName || "Stream")} crossed ${fmtNum(best)} followers` }, true);
   }
 
   function addLikeToTotals(d) {
@@ -2911,23 +2932,37 @@ const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
   }
   setInterval(updateSessionPanel, 1000);
 
-  function buildSummary() {
-    // Nothing has happened yet this load. A block of dashes reads as broken,
-    // so it says what the button will hold instead.
-    if (!firstEventAt) return "Nothing captured yet — go live and this fills in by itself.";
+  // The summary is text, not markup, but a handle still has to be isolated or
+  // its own direction drags the count beside it: "1. المالكي (30)" drew as
+  // "1. (30) المالكي", which reads as a formatting bug rather than a name.
+  // So each line is a list of segments — plain strings, plus { name } for the
+  // handles. Drawing puts the names inside <bdi>; copying joins the plain
+  // strings only, so no isolate characters ever reach the clipboard.
+  function summaryLines() {
     const up = firstEventAt ? fmtDur(Date.now() - firstEventAt) : "–";
-    const topG = boardRows(gifterTotals, "coins");
-    const topL = boardRows(likerTotals, "likes");
     const lines = [
-      "TikTok LIVE summary",
-      `Live for: ${up}`,
-      `Peak viewers: ${peakViewers ? fmtNum(peakViewers) : "–"}`,
-      `Likes: ${totalLikes == null ? "–" : fmtNum(totalLikes)} · Diamonds: ${fmtNum(diamonds)}`
+      ["TikTok LIVE summary"],
+      [`Live for: ${up}`],
+      [`Peak viewers: ${peakViewers ? fmtNum(peakViewers) : "–"}`],
+      [`Likes: ${totalLikes == null ? "–" : fmtNum(totalLikes)} · Diamonds: ${fmtNum(diamonds)}`]
     ];
-    if (followsGained) lines.push(`New followers: +${fmtNum(followsGained)}`);
-    if (topG.length) lines.push("Top gifters: " + topG.map((t, i) => `${i + 1}. ${t.name} (${fmtNum(t.coins)})`).join(" · "));
-    if (topL.length) lines.push("Top likers: " + topL.slice(0, 3).map((t, i) => `${i + 1}. ${t.name} (${fmtNum(t.likes)})`).join(" · "));
-    return lines.join("\n");
+    if (followsGained) lines.push([`New followers: +${fmtNum(followsGained)}`]);
+    const board = (label, rows, valueKey) => {
+      if (!rows.length) return;
+      lines.push([`${label}: `, ...rows.flatMap((t, i) => [
+        ...(i ? [" · "] : []),
+        `${i + 1}. `,
+        { name: t.name },
+        ` (${fmtNum(t[valueKey])})`
+      ])]);
+    };
+    board("Top gifters", boardRows(gifterTotals, "coins"), "coins");
+    board("Top likers", boardRows(likerTotals, "likes").slice(0, 3), "likes");
+    return lines;
+  }
+
+  function summaryPlain(lines) {
+    return lines.map(segs => segs.map(s => (typeof s === "string" ? s : s.name)).join("")).join("\n");
   }
 
   /* ------------------------------------------------------------------ *
@@ -2948,12 +2983,37 @@ const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
     if (!CONTROLS) sheetEl.hidden = true;
   });
 
+  // The text the summary would copy right now, built alongside its rows so a
+  // click never has to read the words back out of the DOM.
+  let summaryCopy = "";
+
   // Opening the Session section is the request for its summary — there is no
   // second button. It is built here, freshly, both on open and on load, so it
   // is a still snapshot of this moment rather than a number that keeps moving
   // while you read or select it.
   function renderSessionSummary() {
-    if (summaryText) summaryText.textContent = buildSummary();
+    if (!summaryText) return;
+    // Nothing has happened yet this load. A block of dashes reads as broken,
+    // so it says what it will hold instead.
+    const lines = firstEventAt
+      ? summaryLines()
+      : [["Nothing captured yet — go live and this fills in by itself."]];
+    summaryCopy = summaryPlain(lines);
+    summaryText.textContent = "";
+    for (const segs of lines) {
+      const row = document.createElement("div");
+      row.className = "sumLine";
+      for (const s of segs) {
+        if (typeof s === "string") {
+          row.appendChild(document.createTextNode(s));
+        } else {
+          const b = document.createElement("bdi");
+          b.textContent = s.name;
+          row.appendChild(b);
+        }
+      }
+      summaryText.appendChild(row);
+    }
   }
   renderSessionSummary();
 
@@ -2969,7 +3029,7 @@ const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
 
   summaryText.addEventListener("click", () => {
     renderSessionSummary();                 // copy the freshest numbers
-    const text = summaryText.textContent;
+    const text = summaryCopy;
     if (!text) return;
     writeClipboard(text).then(ok => flashSessSay(ok
       ? "Copied ✓"
