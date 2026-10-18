@@ -1415,7 +1415,11 @@
     else bits.push("idle");
     if (st.likes) bits.push(`${fmtNum(st.likes)} sent`);
     else if (st.tapping && st.streamer && !st.likes) bits.push("0 sent");
-    if (st.perMin) bits.push(`~${fmtNum(st.perMin)}/min`);
+    // A rate belongs to a running engine. Switched off, the engine still
+    // reports the speed it WOULD tap at, and "idle · ~122/min" then read as if
+    // that were happening right now — the one state the dock sits in for most
+    // of the evening.
+    if (st.perMin && st.on) bits.push(`~${fmtNum(st.perMin)}/min`);
     if (st.error) bits.push("error");
     likeStatusEl.textContent = bits.join(" · ");
 
