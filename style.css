@@ -1375,6 +1375,7 @@ body.controls .chatBar { border-top: 1px solid var(--border); }
   font-weight: 600;
   cursor: pointer;
   border: none;
+  white-space: nowrap;   /* one line, even with a three-digit count */
   box-shadow: 0 4px 14px rgba(0,0,0,.4);
 }
 

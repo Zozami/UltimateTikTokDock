@@ -172,10 +172,14 @@
 
   // true while a row is still in the top slice of the feed — deeper rows
   // are too far back to be "still visible", so those start a new row
-  function nearTop(el) {
+  // "Still near the newest row" — new rows land at the BOTTOM now, so that is
+  // the end of the feed. The like coalescer grows a row in place only while it
+  // is still down there; once it has been pushed up into history it gets its
+  // own row like everything else.
+  function nearFloor(el) {
     let n = el, i = 0;
-    while (n && n.previousElementSibling && i < 24) { n = n.previousElementSibling; i++; }
-    return n === feedEl.firstElementChild;
+    while (n && n.nextElementSibling && i < 24) { n = n.nextElementSibling; i++; }
+    return n === feedEl.lastElementChild;
   }
   let peakViewers = 0;
   let firstEventAt = 0;
@@ -1001,33 +1005,63 @@
    *  Feed intake
    * ------------------------------------------------------------------ */
 
-  // O(1) trimming: track the oldest row so hitting the cap never re-scans
-  // the whole feed (the old version ran querySelectorAll on every insert).
-  let oldestItem = null;
+  // O(1) trimming at the cap: new rows go on the END, so the oldest row is
+  // always the first element — no scan needed to find it, and no pointer to
+  // keep in step.
   function trimFeed() {
     while (itemCount > MAX_ITEMS) {
-      let last = oldestItem && oldestItem.isConnected ? oldestItem : feedEl.lastElementChild;
-      while (last && !last.classList.contains("item")) last = last.previousElementSibling;
-      if (last && last.dataset && last.dataset.uid) likeRows.delete(last.dataset.uid);
-      if (!last) break;
-      oldestItem = last.previousElementSibling;
-      last.remove();
+      let first = feedEl.firstElementChild;
+      while (first && !first.classList.contains("item")) first = first.nextElementSibling;
+      if (!first) break;
+      if (first.dataset && first.dataset.uid) likeRows.delete(first.dataset.uid);
+      first.remove();
       itemCount--;
     }
   }
 
-  function prependItem(el) {
+  // Following the newest row is a job that takes more than one assignment:
+  // the first one uses the layout as it stands this instant, and the filter
+  // bar, a row's own gift art or a late-loading avatar can all change the
+  // height a frame (or a moment) later, which would leave the newest line just
+  // below the edge. So it pins now, on the next frame, and once more shortly
+  // after — and the later passes stand down the moment the view has been moved
+  // by hand, so a reader scrolling up is never yanked back down.
+  //   force: a deliberate jump (a filter, the pill) that should go there even
+  //   though the reader had scrolled up into history.
+  function pinToNewest(force = false) {
+    let pinned = -1;
+    const set = () => {
+      if (!force && paused) return;
+      feedEl.scrollTop = feedEl.scrollHeight;
+      pinned = feedEl.scrollTop;
+    };
+    const again = () => {
+      if (!force && paused) return;
+      if (pinned >= 0 && Math.abs(feedEl.scrollTop - pinned) > 2) return;   // moved by hand
+      set();
+    };
+    set();
+    requestAnimationFrame(again);
+    setTimeout(again, 200);
+  }
+
+  // The feed reads the way every platform chat reads: the newest line arrives
+  // at the BOTTOM and the older rows scroll up and off the top, so the newest
+  // row is always the one sitting where the eye already is.
+  function appendItem(el) {
     if (emptyEl && emptyEl.style.display !== "none") emptyEl.style.display = "none";
-    feedEl.prepend(el);
+    feedEl.appendChild(el);
     itemCount++;
     trimFeed();
 
     if (!paused) {
-      feedEl.scrollTop = 0;
+      // follow the conversation: keep the newest row in view
+      pinToNewest();
     } else {
       pendingCount++;
       pausePill.style.display = "inline-flex";
-      pausePill.textContent = `${pendingCount} new while reading — resume`;
+      // the pill sits at the bottom, right where the newest rows are waiting
+      pausePill.textContent = `${pendingCount} new — jump to latest`;
     }
   }
 
@@ -1186,7 +1220,7 @@
       });
       item.dataset.group = "other";
       applyVisibility(item);
-      prependItem(item);
+      appendItem(item);
       updateHud();
       return;
     }
@@ -1278,7 +1312,7 @@
     if (group === "like" && item.dataset.uid) {
       const uid = item.dataset.uid;
       const prev = likeRows.get(uid);
-      if (prev && now - prev.at < LIKE_MERGE_MS && prev.el.isConnected && nearTop(prev.el)) {
+      if (prev && now - prev.at < LIKE_MERGE_MS && prev.el.isConnected && nearFloor(prev.el)) {
         const add = Number(pick(giftData, "likeCount")) || 0;
         prev.total += add;
         prev.at = now;
@@ -1286,13 +1320,15 @@
         const bold = prev.el.querySelector(".l2 b");
         if (bold) bold.textContent = fmtNum(prev.total);
         prev.el.querySelector(".l2")?.classList.add("merged");
+        // the row just grew, so keep its new last line on screen
+        if (!paused) pinToNewest();
         updateHud();
         return;
       }
       likeRows.set(uid, { el: item, at: now, total: Number(pick(giftData, "likeCount")) || 0, bursts: 1 });
     }
 
-    prependItem(item);
+    appendItem(item);
     updateHud();
   }
 
@@ -1352,9 +1388,16 @@
       userFilterNameEl.innerHTML = `Showing only <b></b>`;
       userFilterNameEl.querySelector("b").textContent = userFilter.name;
       for (const el of document.querySelectorAll(`.bd[data-uid="${CSS.escape(userFilter.uid)}"]`)) el.classList.add("on");
-      feedEl.scrollTop = 0;
     }
     userFilterBar.hidden = !userFilter;
+    // Either way — asking for one person's events, or putting everyone back —
+    // the answer is the newest row, so this re-follows the feed even if the
+    // reader had scrolled up. Forced, because the filter bar and all the rows
+    // it hides or shows move the layout a moment after the click.
+    paused = false;
+    pendingCount = 0;
+    pausePill.style.display = "none";
+    pinToNewest(true);
   }
 
   /* ------------------------------------------------------------------ *
@@ -3174,7 +3217,6 @@ const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
     recentOwnSends.clear();
     likeRows.clear();
     feedEl.querySelectorAll(".item").forEach(el => el.remove());
-    oldestItem = null;
     itemCount = 0;
     sessionTotal = 0;
     diamonds = 0;
@@ -3212,6 +3254,7 @@ const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
     pendingCount = 0;
     paused = false;
     pausePill.style.display = "none";
+    feedEl.scrollTop = 0;
     if (emptyEl) emptyEl.style.display = "";
     updateHud();
   }
@@ -3238,12 +3281,14 @@ const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
   retryBtn.addEventListener("click", () => startEverything());
 
   feedEl.addEventListener("scroll", () => {
-    const atTop = feedEl.scrollTop <= 2;
-    if (paused && atTop) {
+    // The newest row lives at the bottom now, so sitting at the bottom is what
+    // "following along" means and scrolling up into history is the pause.
+    const atBottom = feedEl.scrollTop + feedEl.clientHeight >= feedEl.scrollHeight - 2;
+    if (paused && atBottom) {
       paused = false;
       pendingCount = 0;
       pausePill.style.display = "none";
-    } else if (!atTop && !paused) {
+    } else if (!atBottom && !paused) {
       paused = true;
       pendingCount = 0;
     }
@@ -3253,7 +3298,7 @@ const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
     paused = false;
     pendingCount = 0;
     pausePill.style.display = "none";
-    feedEl.scrollTop = 0;
+    pinToNewest(true);
   });
 
   // vertical mouse wheel scrolls the pill strips sideways; clicking a pill
