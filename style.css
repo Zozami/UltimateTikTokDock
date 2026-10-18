@@ -993,7 +993,19 @@ img.emote {
 }
 
 .board::-webkit-scrollbar { display: none; }
-.board + .board.has { padding-top: 0; border-top: 1px dashed var(--border-soft); margin-top: 4px; }
+
+/* The two boards are one stack read top-down, so the second one wears a
+   hairline to separate them. It only earns that line while the board above it
+   is really on screen (a hidden gifters board used to leave the rule hanging
+   over the hearts on its own), and the space either side of the line has to
+   match: the row above ends on its own 3px padding, so 2px + 3px above and 5px
+   below put the rule halfway between the two rows instead of almost touching
+   the lower one. */
+.board.under {
+  border-top: 1px dashed var(--border-soft);
+  margin-top: 2px;
+  padding-top: 5px;
+}
 
 /* caption is just the crown/heart icon — it identifies the board by itself */
 .bdCap {

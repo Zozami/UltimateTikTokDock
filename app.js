@@ -999,6 +999,10 @@
     tgEl.innerHTML = (boardShow.gifters && topG.length) ? boardHtml(topG, "coins", "gifters") : "";
     tlEl.classList.toggle("has", boardShow.likers && topL.length > 0);
     tlEl.innerHTML = (boardShow.likers && topL.length) ? boardHtml(topL, "likes", "likers") : "";
+    // The divider between the two strips belongs to the lower one, and only
+    // while there is really a strip above it: with the gifters board switched
+    // off, the rule used to hang over the hearts with nothing to divide.
+    tlEl.classList.toggle("under", tgEl.classList.contains("has"));
   }
 
   /* ------------------------------------------------------------------ *
