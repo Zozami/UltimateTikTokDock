@@ -177,6 +177,23 @@ button { font: inherit; }
 .xBtn svg { width: 14px; height: 14px; display: block; }
 .xBtn:hover { background: var(--panel-3); color: var(--text); }
 
+/* the accordion's open-all / close-all switch, kept in the header so it is
+   reachable without scrolling and never competes with the sections it opens */
+.headBtn {
+  flex: none;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.headBtn:hover { border-color: var(--blue); color: var(--text); }
+
 .sheetBody { flex: 1; overflow-y: auto; padding-bottom: 8px; scrollbar-width: thin; scrollbar-color: #3a3b42 transparent; }
 .sheetBody::-webkit-scrollbar { width: 8px; }
 .sheetBody::-webkit-scrollbar-thumb { background: #3a3b42; border-radius: 4px; }

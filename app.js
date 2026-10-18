@@ -1582,6 +1582,34 @@
     // Session has no button of its own any more: opening the section is the
     // request for its summary, so it is built fresh right here.
     if (group.id === "gSess" && !group.classList.contains("closed")) renderSessionSummary();
+    syncAllToggle();
+  });
+
+  // One button for the whole accordion: it opens everything while anything is
+  // shut and closes everything once it is all open. The label is derived from
+  // the sections themselves rather than remembered, so opening one by hand
+  // puts it back to "Expand all" on its own - there is no second state to
+  // keep in step, and nothing to drift.
+  const allToggleBtn = document.getElementById("allToggle");
+
+  function anySectionClosed() {
+    return [...document.querySelectorAll(".sGroup")].some(g => g.classList.contains("closed"));
+  }
+
+  function syncAllToggle() {
+    if (!allToggleBtn) return;
+    const open = anySectionClosed();
+    allToggleBtn.textContent = open ? "Expand all" : "Collapse all";
+    allToggleBtn.title = open ? "Open every section" : "Close every section";
+  }
+
+  if (allToggleBtn) allToggleBtn.addEventListener("click", () => {
+    const open = anySectionClosed();
+    for (const g of document.querySelectorAll(".sGroup")) g.classList.toggle("closed", !open);
+    // The Session section builds its summary when it opens, so opening it from
+    // here has to count as opening it by hand.
+    if (open) renderSessionSummary();
+    syncAllToggle();
   });
 
   /* ------------------------------------------------------------------ *
@@ -3471,6 +3499,7 @@ const CHAT_OK_MSG = "Chat bridge connected - messages will reach TikTok chat";
   goalTypeSel.value = goal.type;
   goalTargetInput.value = goal.target;
   for (const g of document.querySelectorAll(".sGroup")) g.classList.add("closed");
+  syncAllToggle();   // every section starts shut, so the switch starts on "Expand all"
 
   if (CONTROLS) {
     sheetEl.hidden = false;

@@ -8,7 +8,7 @@
        gets re-read when its number changes. You do not have to touch this -
        UPDATE.bat, or the Updates panel in Settings, rewrites all three in lockstep
        on every install (see Update-CacheBust in update.ps1). -->
-  <link rel="stylesheet" href="style.css?v=84">
+  <link rel="stylesheet" href="style.css?v=85">
 </head>
 <body>
   <main class="app">
@@ -86,6 +86,9 @@
     <header class="sheetHead">
       <span class="sheetTitle" id="sheetTitle">Settings</span>
       <span class="headRight">
+        <!-- One control for the whole accordion: it says what it will do next,
+             and the sections decide that, not a remembered flag. -->
+        <button id="allToggle" class="headBtn" type="button" title="Open every section">Expand all</button>
         <span id="cDot" class="dot" title=""></span>
         <button id="sheetClose" class="xBtn" type="button" title="Close settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -362,7 +365,7 @@
     </div>
   </div>
 
-  <script src="obs-ws.js?v=84"></script>
-  <script src="app.js?v=84"></script>
+  <script src="obs-ws.js?v=85"></script>
+  <script src="app.js?v=85"></script>
 </body>
 </html>
